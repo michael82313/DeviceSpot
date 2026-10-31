@@ -1,0 +1,6 @@
+{
+  "name": "DeviceSpot",
+  "description": "Smart QR and barcode hardware manager to track where devices are stored and left last",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
