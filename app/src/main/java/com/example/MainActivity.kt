@@ -19,6 +19,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.data.repository.DeviceRepository
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.SignInScreen
+import com.example.ui.screens.TwoFactorScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.DeviceViewModel
 import com.example.util.configureAppCheck
@@ -38,10 +39,16 @@ class MainActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val auth = FirebaseAuth.getInstance()
                     var currentUser by remember { mutableStateOf<FirebaseUser?>(auth.currentUser) }
+                    
+                    // State tracker to ensure 2FA challenges are satisfied before entering the App
+                    var isMfaVerified by remember { mutableStateOf(false) }
 
                     DisposableEffect(auth) {
                         val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
                             currentUser = firebaseAuth.currentUser
+                            if (firebaseAuth.currentUser == null) {
+                                isMfaVerified = false
+                            }
                         }
                         auth.addAuthStateListener(listener)
                         onDispose {
@@ -50,36 +57,62 @@ class MainActivity : ComponentActivity() {
                     }
 
                     val user = currentUser
-                    if (user == null) {
-                        SignInScreen(onSignInSuccess = {
-                            currentUser = auth.currentUser
-                        })
-                    } else {
-                        val context = LocalContext.current
-                        val databaseId = context.getString(R.string.firestore_database_id)
-                        val viewModel: DeviceViewModel = viewModel(
-                            key = user.uid,
-                            factory = viewModelFactory {
-                                initializer {
-                                    val db = FirebaseFirestore.getInstance(databaseId)
-                                    val repository = DeviceRepository(db, user.uid)
-                                    DeviceViewModel(
-                                        repository = repository,
-                                        currentUserId = user.uid,
-                                        userEmail = user.email ?: "",
-                                        userDisplayName = user.displayName ?: (user.email?.substringBefore("@") ?: "User")
-                                    )
+                    when {
+                        // Condition A: Not logged in at all -> Go to Sign In
+                        user == null -> {
+                            SignInScreen(
+                                onSignInSuccess = {
+                                    currentUser = auth.currentUser
+                                },
+                                onPasskeyVerificationCompleted = { credentialDataJson ->
+                                    android.util.Log.d("MainActivity", "Received validated passkey payload: $credentialDataJson")
+                                    // Pass this credential structural string to your backend server if needed
                                 }
-                            }
-                        )
+                            )
+                        }
+                        
+                        // Condition B: Logged in, but needs to clear the 2FA Check
+                        !isMfaVerified -> {
+                            TwoFactorScreen(
+                                userUid = user.uid,
+                                onVerificationSuccess = {
+                                    isMfaVerified = true
+                                },
+                                onSignOut = {
+                                    auth.signOut()
+                                    currentUser = null
+                                }
+                            )
+                        }
+                        
+                        // Condition C: Fully authorized -> Launch core screen
+                        else -> {
+                            val context = LocalContext.current
+                            val databaseId = context.getString(R.string.firestore_database_id)
+                            val viewModel: DeviceViewModel = viewModel(
+                                key = user.uid,
+                                factory = viewModelFactory {
+                                    initializer {
+                                        val db = FirebaseFirestore.getInstance(databaseId)
+                                        val repository = DeviceRepository(db, user.uid)
+                                        DeviceViewModel(
+                                            repository = repository,
+                                            currentUserId = user.uid,
+                                            userEmail = user.email ?: "",
+                                            userDisplayName = user.displayName ?: (user.email?.substringBefore("@") ?: "User")
+                                        )
+                                    }
+                                }
+                            )
 
-                        HomeScreen(
-                            viewModel = viewModel,
-                            onSignOut = {
-                                auth.signOut()
-                                currentUser = null
-                            }
-                        )
+                            HomeScreen(
+                                viewModel = viewModel,
+                                onSignOut = {
+                                    auth.signOut()
+                                    currentUser = null
+                                }
+                            )
+                        }
                     }
                 }
             }
