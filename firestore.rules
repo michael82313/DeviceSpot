@@ -83,3 +83,32 @@ service cloud.firestore {
     }
   }
 }
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Core Rules for User Profiles and Security Attributes
+    match /users/{userId} {
+      // Users can only read/write their own top-level details
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Isolated Sub-Collection to guard 2FA secrets 
+      match /security/mfa_settings {
+        // Enforce strict get-only access: List queries are blocked to stop sweeping leaks
+        allow get: if request.auth != null && request.auth.uid == userId;
+        
+        // Only allow a user to write their 2FA record if they pass an authenticated session match
+        allow create, update: if request.auth != null && request.auth.uid == userId;
+        allow delete: if false; // Lock deletion to protect MFA settings from client-side tampering
+      }
+    }
+    
+    // Core Rules for Device Logging Data Models (DeviceSpot Tracking)
+    match /devices/{deviceId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+
