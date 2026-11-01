@@ -140,9 +140,6 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
   // "ksp"(libs.moshi.kotlin.codegen)
-
-  // Added 2FA TOTP library authentication package
-  implementation("dev.samstevens.totp:totp:1.7.1")
 }
 
 tasks.withType<Test> {
