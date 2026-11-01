@@ -121,6 +121,8 @@ dependencies {
   implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
+  implementation("com.yubico:webauthn-server-core:2.5.0") // Passkeys  
+  implementation("org.jboss.aerogear:aerogear-otp-java:1.0.0") // TOTP 2FA
   // implementation(libs.logging.interceptor)
   // implementation(libs.moshi.kotlin)
   // implementation(libs.okhttp)
