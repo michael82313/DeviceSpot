@@ -106,7 +106,24 @@ object QrCodeGenerator {
      * Generates a short, clean, unique QR/Barcode ID like "DEV-8491"
      */
     fun generateUniqueCode(): String {
+        return generateRandomQrCode()
+    }
+
+    /**
+     * Generates a random alphanumeric QR tag payload (e.g. "DEV-4821")
+     */
+    fun generateRandomQrCode(): String {
         val rand = (1000..9999).random()
         return "DEV-$rand"
+    }
+
+    /**
+     * Generates a 12-digit numeric barcode (UPC / Code-128 compatible)
+     */
+    fun generateRandomBarcode(): String {
+        val prefix = (200..899).random()
+        val middle = (1000..9999).random()
+        val suffix = (10000..99999).random()
+        return "$prefix$middle$suffix"
     }
 }

@@ -97,4 +97,32 @@ class ExampleRobolectricTest {
         assertEquals("UPC-A Retail Barcode", QrCodeAnalyzer.getBarcodeFormatName(Barcode.FORMAT_UPC_A))
         assertEquals("EAN-13 Product Barcode", QrCodeAnalyzer.getBarcodeFormatName(Barcode.FORMAT_EAN_13))
     }
+
+    @Test
+    fun `test random barcode generation produces 12 digit code`() {
+        val barcode = QrCodeGenerator.generateRandomBarcode()
+        assertEquals(12, barcode.length)
+        assertTrue(barcode.all { it.isDigit() })
+    }
+
+    @Test
+    fun `test create printable label bitmap renders for qr and barcode`() {
+        val qrLabel = com.example.util.PrintTagHelper.createPrintableLabelBitmap(
+            title = "Sony Alpha A7 IV",
+            code = "DEV-4821",
+            location = "Cabinet A",
+            isBarcode = false
+        )
+        assertNotNull(qrLabel)
+        assertEquals(900, qrLabel!!.width)
+
+        val barcodeLabel = com.example.util.PrintTagHelper.createPrintableLabelBitmap(
+            title = "Sony Alpha A7 IV",
+            code = "482910382910",
+            location = "Cabinet A",
+            isBarcode = true
+        )
+        assertNotNull(barcodeLabel)
+        assertEquals(900, barcodeLabel!!.width)
+    }
 }

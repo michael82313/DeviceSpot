@@ -41,10 +41,12 @@ googleServices = "4.5.0"
 credentials = "1.5.0"
 googleid = "1.1.1"
 barcodeScanning = "17.3.0"
+print = "1.0.0"
 
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-print = { group = "androidx.print", name = "print", version.ref = "print" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }

@@ -61,9 +61,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import android.graphics.Bitmap
+import androidx.compose.foundation.Image
+import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.ViewWeek
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import com.example.data.model.Device
 import com.example.ui.viewmodel.DeviceViewModel
+import com.example.util.PrintTagHelper
 import com.example.util.QrCodeGenerator
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -78,6 +88,8 @@ fun AddEditDeviceDialog(
     onSave: (Device) -> Unit
 ) {
     val isEdit = initialDevice != null
+    val context = LocalContext.current
+    var isBarcodeMode by remember { mutableStateOf(false) }
 
     var name by remember { mutableStateOf(initialDevice?.name ?: "") }
     var model by remember { mutableStateOf(initialDevice?.model ?: "") }
@@ -210,11 +222,20 @@ fun AddEditDeviceDialog(
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                     leadingIcon = {
-                        Icon(imageVector = Icons.Default.QrCode, contentDescription = null)
+                        Icon(
+                            imageVector = if (isBarcodeMode) Icons.Default.ViewWeek else Icons.Default.QrCode,
+                            contentDescription = null
+                        )
                     },
                     trailingIcon = {
                         IconButton(
-                            onClick = { qrCode = QrCodeGenerator.generateUniqueCode() },
+                            onClick = {
+                                qrCode = if (isBarcodeMode) {
+                                    QrCodeGenerator.generateRandomBarcode()
+                                } else {
+                                    QrCodeGenerator.generateRandomQrCode()
+                                }
+                            },
                             modifier = Modifier.testTag("generate_qr_code_btn")
                         ) {
                             Icon(
@@ -228,6 +249,201 @@ fun AddEditDeviceDialog(
                         .fillMaxWidth()
                         .testTag("device_qr_input")
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Generator & Print Controls Card
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("generate_and_print_card"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Code Generation & Printing",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            // Quick Format Selector (QR / Barcode)
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                FilterChip(
+                                    selected = !isBarcodeMode,
+                                    onClick = { isBarcodeMode = false },
+                                    label = { Text("2D QR", style = MaterialTheme.typography.labelSmall) },
+                                    modifier = Modifier.testTag("select_qr_format_chip")
+                                )
+                                FilterChip(
+                                    selected = isBarcodeMode,
+                                    onClick = { isBarcodeMode = true },
+                                    label = { Text("1D Barcode", style = MaterialTheme.typography.labelSmall) },
+                                    modifier = Modifier.testTag("select_barcode_format_chip")
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Generate Random and Print Tag action buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilledTonalButton(
+                                onClick = {
+                                    qrCode = if (isBarcodeMode) {
+                                        QrCodeGenerator.generateRandomBarcode()
+                                    } else {
+                                        QrCodeGenerator.generateRandomQrCode()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 44.dp)
+                                    .testTag("generate_random_code_action_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Autorenew,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (isBarcodeMode) "Random Barcode" else "Random QR",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+
+                            Button(
+                                onClick = {
+                                    if (qrCode.isBlank()) {
+                                        qrCode = if (isBarcodeMode) {
+                                            QrCodeGenerator.generateRandomBarcode()
+                                        } else {
+                                            QrCodeGenerator.generateRandomQrCode()
+                                        }
+                                    }
+                                    PrintTagHelper.printAssetTag(
+                                        context = context,
+                                        deviceTitle = name.ifBlank { "Asset Tag" },
+                                        code = qrCode,
+                                        location = storageLocation,
+                                        isBarcode = isBarcodeMode
+                                    )
+                                },
+                                enabled = qrCode.isNotBlank(),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 44.dp)
+                                    .testTag("print_generated_code_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Print,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Print " + if (isBarcodeMode) "Barcode" else "QR",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        }
+
+                        // Live visual preview of the generated code
+                        if (qrCode.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            val previewQrBitmap by produceState<Bitmap?>(initialValue = null, qrCode) {
+                                value = withContext(Dispatchers.IO) {
+                                    QrCodeGenerator.generateQrBitmap(qrCode, size = 180)
+                                }
+                            }
+                            val previewBarcodeBitmap by produceState<Bitmap?>(initialValue = null, qrCode) {
+                                value = withContext(Dispatchers.IO) {
+                                    QrCodeGenerator.generate1DBarcodeBitmap(qrCode, width = 360, height = 90)
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.White,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .border(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(4.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isBarcodeMode) {
+                                            previewBarcodeBitmap?.let { bm ->
+                                                Image(
+                                                    bitmap = bm.asImageBitmap(),
+                                                    contentDescription = "Generated Barcode",
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(44.dp)
+                                                )
+                                            }
+                                        } else {
+                                            previewQrBitmap?.let { bm ->
+                                                Image(
+                                                    bitmap = bm.asImageBitmap(),
+                                                    contentDescription = "Generated QR Code",
+                                                    modifier = Modifier.size(60.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Column(
+                                        modifier = Modifier.padding(start = 8.dp),
+                                        horizontalAlignment = Alignment.End
+                                    ) {
+                                        Text(
+                                            text = qrCode,
+                                            style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.Black
+                                        )
+                                        Text(
+                                            text = if (isBarcodeMode) "Ready to Print (1D Barcode)" else "Ready to Print (QR Code)",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.DarkGray
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
