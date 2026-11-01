@@ -251,31 +251,31 @@ fun HomeScreen(
             when (currentTab) {
                 0 -> DevicesTab(
                     devices = filteredDevices,
-                    totalDeviceCount = allDevices.size,
+                    allDevicesCount = allDevices.size,
                     searchQuery = searchQuery,
-                    onSearchQueryChange = { viewModel.onSearchQueryChange(it) },
+                    onSearchChange = { viewModel.onSearchQueryChange(it) },
                     selectedCategory = selectedCategory,
                     onCategorySelect = { viewModel.onCategorySelect(it) },
                     selectedStatus = selectedStatus,
                     onStatusSelect = { viewModel.onStatusSelect(it) },
-                    selectedLocation = selectedLocationFilter,
-                    onLocationSelect = { viewModel.onLocationFilterSelect(it) },
+                    selectedLocationFilter = selectedLocationFilter,
+                    onLocationFilterClear = { viewModel.onLocationFilterSelect(null) },
                     onDeviceClick = { viewModel.openDeviceDetail(it) },
-                    onUpdateSpotClick = { viewModel.openUpdateLocation(it) },
-                    onShowQrClick = { viewModel.openQrPreview(it) },
-                    onAddNewDevice = { viewModel.openAddDevice() }
+                    onUpdateLocationClick = { viewModel.openUpdateLocation(it) },
+                    onViewQrClick = { viewModel.openQrPreview(it) },
+                    onAddDeviceClick = { viewModel.openAddDevice() }
                 )
                 1 -> LocationsTab(
                     devices = allDevices,
-                    onDeviceClick = { viewModel.openDeviceDetail(it) },
-                    onLocationFilterSelect = { location ->
+                    onSelectLocation = { location ->
                         viewModel.onLocationFilterSelect(location)
                         currentTab = 0
-                    }
+                    },
+                    onDeviceClick = { viewModel.openDeviceDetail(it) }
                 )
                 2 -> AuditLogTab(
                     logs = allLogs,
-                    onDeviceClick = { log ->
+                    onLogClick = { log ->
                         val dev = allDevices.find { it.id == log.deviceId }
                         if (dev != null) {
                             viewModel.openDeviceDetail(dev)
@@ -289,7 +289,7 @@ fun HomeScreen(
     // Modal: Full Camera QR & Barcode Scanner Bottom Sheet
     if (isScannerOpen) {
         QrScannerSheet(
-            devices = allDevices,
+            devicesList = allDevices,
             onDismiss = { isScannerOpen = false },
             onCodeScanned = { rawCode, formatName ->
                 isScannerOpen = false
@@ -303,15 +303,19 @@ fun HomeScreen(
         ScanResultDialog(
             result = result,
             onDismiss = { viewModel.clearScanResult() },
-            onViewDevice = { dev ->
-                viewModel.clearScanResult()
-                viewModel.openDeviceDetail(dev)
-            },
             onUpdateLocation = { dev ->
                 viewModel.clearScanResult()
                 viewModel.openUpdateLocation(dev)
             },
-            onRegisterNew = { rawQr ->
+            onQuickReturnHome = { dev ->
+                viewModel.clearScanResult()
+                viewModel.quickReturnToStorage(dev)
+            },
+            onViewDetail = { dev ->
+                viewModel.clearScanResult()
+                viewModel.openDeviceDetail(dev)
+            },
+            onRegisterNewDevice = { rawQr ->
                 viewModel.clearScanResult()
                 viewModel.openAddDevice(initialQr = rawQr)
             }
@@ -328,6 +332,9 @@ fun HomeScreen(
                 viewModel.closeDeviceDetail()
                 viewModel.openEditDevice(device)
             },
+            onDelete = {
+                viewModel.deleteDevice(device)
+            },
             onUpdateLocation = {
                 viewModel.closeDeviceDetail()
                 viewModel.openUpdateLocation(device)
@@ -335,11 +342,8 @@ fun HomeScreen(
             onQuickReturnToStorage = {
                 viewModel.quickReturnToStorage(device)
             },
-            onShowQr = {
+            onViewQr = {
                 viewModel.openQrPreview(device)
-            },
-            onDelete = {
-                viewModel.deleteDevice(device)
             }
         )
     }
@@ -347,8 +351,8 @@ fun HomeScreen(
     // Modal: Add / Edit Device Dialog
     if (isAddEditOpen) {
         AddEditDeviceDialog(
-            editingDevice = editingDevice,
-            initialQr = prefillQrCode,
+            initialDevice = editingDevice,
+            prefillQrCode = prefillQrCode,
             availableLocations = distinctLocations,
             aiSuggestionState = aiSuggestionState,
             onRequestAiSuggestion = { name, model ->
