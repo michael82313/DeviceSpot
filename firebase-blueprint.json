@@ -1,0 +1,71 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile document",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "createdAt"]
+    },
+    "Device": {
+      "title": "Device",
+      "description": "A tracked hardware device with barcode/QR code and location",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "qrCode": { "type": "string" },
+        "name": { "type": "string" },
+        "model": { "type": "string" },
+        "category": { "type": "string" },
+        "storageLocation": { "type": "string" },
+        "currentLocation": { "type": "string" },
+        "status": { "type": "string" },
+        "assignedTo": { "type": "string" },
+        "notes": { "type": "string" },
+        "colorTag": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "qrCode", "name", "category", "storageLocation", "currentLocation", "status", "createdAt"]
+    },
+    "DeviceLocationLog": {
+      "title": "DeviceLocationLog",
+      "description": "Audit trail log of device movement or status changes",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "deviceId": { "type": "string" },
+        "deviceQrCode": { "type": "string" },
+        "deviceName": { "type": "string" },
+        "fromLocation": { "type": "string" },
+        "toLocation": { "type": "string" },
+        "action": { "type": "string" },
+        "actor": { "type": "string" },
+        "note": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "deviceQrCode", "deviceName", "fromLocation", "toLocation", "action", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile collection"
+    },
+    "/users/{userId}/devices/{deviceId}": {
+      "schema": { "$ref": "#/entities/Device" },
+      "description": "Tracked devices belonging to the user"
+    },
+    "/users/{userId}/device_location_logs/{logId}": {
+      "schema": { "$ref": "#/entities/DeviceLocationLog" },
+      "description": "Movement and checkout audit logs for user devices"
+    }
+  }
+}

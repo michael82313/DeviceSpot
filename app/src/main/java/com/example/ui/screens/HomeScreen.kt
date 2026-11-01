@@ -1,20 +1,32 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -25,6 +37,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -35,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -52,6 +66,7 @@ import com.example.ui.viewmodel.DeviceViewModel
 @Composable
 fun HomeScreen(
     viewModel: DeviceViewModel,
+    onSignOut: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val allDevices by viewModel.allDevices.collectAsStateWithLifecycle()
@@ -81,6 +96,7 @@ fun HomeScreen(
 
     var currentTab by remember { mutableIntStateOf(0) }
     var isScannerOpen by remember { mutableStateOf(false) }
+    var isAccountDialogOpen by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -103,11 +119,27 @@ fun HomeScreen(
                             }
                         }
                         Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "DeviceSpot",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Black
-                        )
+                        Column {
+                            Text(
+                                text = "DeviceSpot",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Black
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color(0xFF00E676),
+                                    modifier = Modifier.size(6.dp)
+                                ) {}
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Synced",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
                     }
                 },
                 actions = {
@@ -141,6 +173,17 @@ fun HomeScreen(
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Add Device"
+                        )
+                    }
+                    // Account & Multi-Device Sync Button
+                    IconButton(
+                        onClick = { isAccountDialogOpen = true },
+                        modifier = Modifier.testTag("top_bar_account_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AccountCircle,
+                            contentDescription = "Account & Multi-Device Sync",
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                 },
@@ -183,84 +226,95 @@ fun HomeScreen(
             }
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { isScannerOpen = true },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.QrCodeScanner,
-                        contentDescription = "Scan Code",
-                        modifier = Modifier.size(22.dp)
-                    )
-                },
-                text = { Text("Scan Code", fontWeight = FontWeight.Bold) },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.testTag("fab_scan_qr")
-            )
+            if (currentTab == 0) {
+                ExtendedFloatingActionButton(
+                    onClick = { isScannerOpen = true },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.QrCodeScanner,
+                            contentDescription = null
+                        )
+                    },
+                    text = { Text("Scan Code", fontWeight = FontWeight.Bold) },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.testTag("home_scan_fab")
+                )
+            }
         }
-    ) { innerPadding ->
+    ) { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(paddingValues)
         ) {
             when (currentTab) {
                 0 -> DevicesTab(
                     devices = filteredDevices,
-                    allDevicesCount = allDevices.size,
+                    totalDeviceCount = allDevices.size,
                     searchQuery = searchQuery,
-                    onSearchChange = { viewModel.onSearchQueryChange(it) },
+                    onSearchQueryChange = { viewModel.onSearchQueryChange(it) },
                     selectedCategory = selectedCategory,
                     onCategorySelect = { viewModel.onCategorySelect(it) },
                     selectedStatus = selectedStatus,
                     onStatusSelect = { viewModel.onStatusSelect(it) },
-                    selectedLocationFilter = selectedLocationFilter,
-                    onLocationFilterClear = { viewModel.onLocationFilterSelect(null) },
+                    selectedLocation = selectedLocationFilter,
+                    onLocationSelect = { viewModel.onLocationFilterSelect(it) },
                     onDeviceClick = { viewModel.openDeviceDetail(it) },
-                    onUpdateLocationClick = { viewModel.openUpdateLocation(it) },
-                    onViewQrClick = { viewModel.openQrPreview(it) },
-                    onAddDeviceClick = { viewModel.openAddDevice() }
+                    onUpdateSpotClick = { viewModel.openUpdateLocation(it) },
+                    onShowQrClick = { viewModel.openQrPreview(it) },
+                    onAddNewDevice = { viewModel.openAddDevice() }
                 )
                 1 -> LocationsTab(
                     devices = allDevices,
-                    onSelectLocation = { loc ->
-                        viewModel.onLocationFilterSelect(loc)
+                    onDeviceClick = { viewModel.openDeviceDetail(it) },
+                    onLocationFilterSelect = { location ->
+                        viewModel.onLocationFilterSelect(location)
                         currentTab = 0
-                    },
-                    onDeviceClick = { viewModel.openDeviceDetail(it) }
+                    }
                 )
                 2 -> AuditLogTab(
                     logs = allLogs,
-                    onLogClick = { log ->
+                    onDeviceClick = { log ->
                         val dev = allDevices.find { it.id == log.deviceId }
-                        if (dev != null) viewModel.openDeviceDetail(dev)
+                        if (dev != null) {
+                            viewModel.openDeviceDetail(dev)
+                        }
                     }
                 )
             }
         }
     }
 
-    // Modal: QR & Barcode Scanner Sheet
+    // Modal: Full Camera QR & Barcode Scanner Bottom Sheet
     if (isScannerOpen) {
         QrScannerSheet(
-            devicesList = allDevices,
+            devices = allDevices,
             onDismiss = { isScannerOpen = false },
-            onCodeScanned = { scannedCode, formatName ->
+            onCodeScanned = { rawCode, formatName ->
                 isScannerOpen = false
-                viewModel.onQrScanned(scannedCode, formatName)
+                viewModel.onQrScanned(rawCode, formatName)
             }
         )
     }
 
-    // Modal: Scan Result Dialog
+    // Modal: Lookup Result Dialog
     scanLookupResult?.let { result ->
         ScanResultDialog(
             result = result,
             onDismiss = { viewModel.clearScanResult() },
-            onUpdateLocation = { dev -> viewModel.openUpdateLocation(dev) },
-            onQuickReturnHome = { dev -> viewModel.quickReturnToStorage(dev) },
-            onViewDetail = { dev -> viewModel.openDeviceDetail(dev) },
-            onRegisterNewDevice = { qr -> viewModel.openAddDevice(initialQr = qr) }
+            onViewDevice = { dev ->
+                viewModel.clearScanResult()
+                viewModel.openDeviceDetail(dev)
+            },
+            onUpdateLocation = { dev ->
+                viewModel.clearScanResult()
+                viewModel.openUpdateLocation(dev)
+            },
+            onRegisterNew = { rawQr ->
+                viewModel.clearScanResult()
+                viewModel.openAddDevice(initialQr = rawQr)
+            }
         )
     }
 
@@ -274,27 +328,32 @@ fun HomeScreen(
                 viewModel.closeDeviceDetail()
                 viewModel.openEditDevice(device)
             },
-            onDelete = { viewModel.deleteDevice(device) },
             onUpdateLocation = {
+                viewModel.closeDeviceDetail()
                 viewModel.openUpdateLocation(device)
             },
             onQuickReturnToStorage = {
                 viewModel.quickReturnToStorage(device)
             },
-            onViewQr = {
+            onShowQr = {
                 viewModel.openQrPreview(device)
+            },
+            onDelete = {
+                viewModel.deleteDevice(device)
             }
         )
     }
 
-    // Modal: Add or Edit Device Dialog (with Gemini AI suggestion capability)
+    // Modal: Add / Edit Device Dialog
     if (isAddEditOpen) {
         AddEditDeviceDialog(
-            initialDevice = editingDevice,
-            prefillQrCode = prefillQrCode,
+            editingDevice = editingDevice,
+            initialQr = prefillQrCode,
             availableLocations = distinctLocations,
             aiSuggestionState = aiSuggestionState,
-            onRequestAiSuggestion = { name, model -> viewModel.requestAiDeviceSuggestion(name, model) },
+            onRequestAiSuggestion = { name, model ->
+                viewModel.requestAiDeviceSuggestion(name, model)
+            },
             onResetAiSuggestion = { viewModel.resetAiSuggestion() },
             onDismiss = { viewModel.closeAddEdit() },
             onSave = { updatedDevice -> viewModel.saveDevice(updatedDevice) }
@@ -331,4 +390,134 @@ fun HomeScreen(
             onAsk = { q -> viewModel.askAiLocator(q) }
         )
     }
+
+    // Modal: Account & Multi-Device Sync Dialog
+    if (isAccountDialogOpen) {
+        AccountSyncDialog(
+            userEmail = viewModel.userEmail,
+            userDisplayName = viewModel.userDisplayName,
+            deviceCount = allDevices.size,
+            onSignOut = onSignOut,
+            onDismiss = { isAccountDialogOpen = false }
+        )
+    }
+}
+
+@Composable
+fun AccountSyncDialog(
+    userEmail: String,
+    userDisplayName: String,
+    deviceCount: Int,
+    onSignOut: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.CloudDone,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Account & Cloud Sync",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = userDisplayName.ifBlank { "Signed In User" },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (userEmail.isNotBlank()) {
+                            Text(
+                                text = userEmail,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFF00E676),
+                            modifier = Modifier.size(10.dp)
+                        ) {}
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Live Multi-Device Sync: Active",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "$deviceCount items synced across all your devices",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "All your QR codes, barcodes, storage shelves, and movement history are backed up and live-synced in real-time across all your phones, tablets, and workstations.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("account_dialog_close_btn")
+            ) {
+                Text("Done")
+            }
+        },
+        dismissButton = {
+            Button(
+                onClick = {
+                    onDismiss()
+                    onSignOut()
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
+                ),
+                modifier = Modifier.testTag("sign_out_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Logout,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Sign Out")
+            }
+        }
+    )
 }

@@ -558,8 +558,7 @@ fun AddEditDeviceDialog(
                                 status = status,
                                 assignedTo = assignedTo.trim(),
                                 notes = notes.trim(),
-                                colorTag = colorTag,
-                                lastUpdated = System.currentTimeMillis()
+                                colorTag = colorTag
                             )
                             onResetAiSuggestion()
                             onSave(updatedDevice)

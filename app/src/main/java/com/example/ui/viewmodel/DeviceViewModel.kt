@@ -1,17 +1,17 @@
 package com.example.ui.viewmodel
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.data.AppDatabase
 import com.example.data.model.Device
 import com.example.data.model.DeviceLocationLog
 import com.example.data.repository.DeviceRepository
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -20,13 +20,17 @@ sealed interface ScanLookupResult {
     data class Unknown(val rawCode: String, val formatName: String = "Barcode") : ScanLookupResult
 }
 
-class DeviceViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val repository: DeviceRepository
+class DeviceViewModel(
+    private val repository: DeviceRepository,
+    val currentUserId: String,
+    val userEmail: String = "",
+    val userDisplayName: String = ""
+) : ViewModel() {
 
     init {
-        val database = AppDatabase.getDatabase(application)
-        repository = DeviceRepository(database.deviceDao())
+        viewModelScope.launch {
+            repository.seedInitialDevicesIfEmpty()
+        }
     }
 
     val allDevices: StateFlow<List<Device>> = repository.allDevices
@@ -43,12 +47,16 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
             initialValue = emptyList()
         )
 
-    val distinctLocations: StateFlow<List<String>> = repository.distinctLocations
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
+    val distinctLocations: StateFlow<List<String>> = allDevices.map { devices ->
+        devices.flatMap { listOf(it.currentLocation, it.storageLocation) }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -193,7 +201,6 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             repository.saveDevice(device)
             closeAddEdit()
-            // If the updated device was selected in detail, keep it updated
             if (_selectedDeviceForDetail.value?.id == device.id) {
                 _selectedDeviceForDetail.value = device
             }
@@ -211,13 +218,11 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
             repository.updateLocation(device, newLocation, newStatus, actor, note)
             closeUpdateLocation()
             clearScanResult()
-            // If currently viewed in detail, update it
             if (_selectedDeviceForDetail.value?.id == device.id) {
                 _selectedDeviceForDetail.value = device.copy(
                     currentLocation = newLocation.trim(),
                     status = newStatus,
-                    assignedTo = if (newStatus == Device.STATUS_STORED) "" else actor.ifBlank { device.assignedTo },
-                    lastUpdated = System.currentTimeMillis()
+                    assignedTo = if (newStatus == Device.STATUS_STORED) "" else actor.ifBlank { device.assignedTo }
                 )
             }
         }
@@ -233,7 +238,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
-    fun getLogsForDevice(deviceId: Long) = repository.getLogsForDevice(deviceId)
+    fun getLogsForDevice(deviceId: String): Flow<List<DeviceLocationLog>> = repository.getLogsForDevice(deviceId)
 
     // Gemini AI Assistant Integration
     private val aiAssistant = com.example.ai.DeviceAiAssistant()

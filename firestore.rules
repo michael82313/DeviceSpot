@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidDevice(data) {
+      return data.userId is string && data.userId.size() > 0 &&
+             data.qrCode is string && data.qrCode.size() > 0 && data.qrCode.size() <= 256 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             (!('model' in data) || (data.model is string && data.model.size() <= 100)) &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 100 &&
+             data.storageLocation is string && data.storageLocation.size() > 0 && data.storageLocation.size() <= 100 &&
+             data.currentLocation is string && data.currentLocation.size() > 0 && data.currentLocation.size() <= 100 &&
+             data.status is string && data.status.size() > 0 && data.status.size() <= 50 &&
+             (!('assignedTo' in data) || (data.assignedTo is string && data.assignedTo.size() <= 100)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000)) &&
+             (!('colorTag' in data) || (data.colorTag is string && data.colorTag.size() <= 20)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidDeviceLog(data) {
+      return data.userId is string && data.userId.size() > 0 &&
+             (!('deviceId' in data) || (data.deviceId is string && data.deviceId.size() <= 128)) &&
+             data.deviceQrCode is string && data.deviceQrCode.size() > 0 && data.deviceQrCode.size() <= 256 &&
+             data.deviceName is string && data.deviceName.size() > 0 && data.deviceName.size() <= 100 &&
+             data.fromLocation is string && data.fromLocation.size() <= 100 &&
+             data.toLocation is string && data.toLocation.size() <= 100 &&
+             data.action is string && data.action.size() > 0 && data.action.size() <= 100 &&
+             (!('actor' in data) || (data.actor is string && data.actor.size() <= 100)) &&
+             (!('note' in data) || (data.note is string && data.note.size() <= 500)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    match /users/{userId} {
+      allow get, list: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'createdAt']) &&
+                       incoming().keys().hasOnly(['userId', 'email', 'displayName', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time;
+      allow update: if isSignedIn() && request.auth.uid == userId &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'updatedAt']);
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+
+      match /devices/{deviceId} {
+        allow get, list: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn() && request.auth.uid == userId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll(['userId', 'qrCode', 'name', 'category', 'storageLocation', 'currentLocation', 'status', 'createdAt']) &&
+                         incoming().keys().hasOnly(['userId', 'qrCode', 'name', 'model', 'category', 'storageLocation', 'currentLocation', 'status', 'assignedTo', 'notes', 'colorTag', 'createdAt', 'updatedAt']) &&
+                         isValidDevice(incoming());
+        allow update: if isSignedIn() && request.auth.uid == userId &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidDevice(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['qrCode', 'name', 'model', 'category', 'storageLocation', 'currentLocation', 'status', 'assignedTo', 'notes', 'colorTag', 'updatedAt']);
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      match /device_location_logs/{logId} {
+        allow get, list: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn() && request.auth.uid == userId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll(['userId', 'deviceQrCode', 'deviceName', 'fromLocation', 'toLocation', 'action', 'createdAt']) &&
+                         incoming().keys().hasOnly(['userId', 'deviceId', 'deviceQrCode', 'deviceName', 'fromLocation', 'toLocation', 'action', 'actor', 'note', 'timestamp', 'createdAt']) &&
+                         isValidDeviceLog(incoming());
+        allow update: if false;
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+  }
+}
