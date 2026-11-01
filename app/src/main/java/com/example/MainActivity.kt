@@ -46,4 +46,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+ setContent {
+    MyApplicationTheme {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            val auth = FirebaseAuth.getInstance()
+            
+            // 🔥 TEMPORARY LINE: Force sign out to test the login screen
+            auth.signOut() 
+            
+            var currentUser by remember { mutableStateOf(auth.currentUser) }
 
+            if (currentUser == null) {
+                SignInScreen(onSignInSuccess = {
+                    currentUser = auth.currentUser
+                })
+            } else {
+                val viewModel: DeviceViewModel = viewModel()
+                HomeScreen(viewModel = viewModel)
+            }
+        }
+    }
+}
