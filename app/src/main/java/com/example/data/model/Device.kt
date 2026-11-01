@@ -49,7 +49,8 @@ data class Device(
             "Drones & Robotics",
             "Power & Chargers",
             "Cables & Adapters",
-            "Storage Bins & Boxes"
+            "Storage Bins & Boxes",
+            "Other"
         )
 
         val DEFAULT_LOCATIONS = listOf(
