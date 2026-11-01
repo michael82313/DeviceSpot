@@ -26,11 +26,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             MyApplicationTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    // 1. Track the active Firebase Auth user state dynamically
                     val auth = FirebaseAuth.getInstance()
+                    
+                    // 🔥 TEMPORARY DEBUG LINE: Forces a clean sign-out state on start
+                    auth.signOut() 
+
+                    // Track the active Firebase Auth user state dynamically
                     var currentUser by remember { mutableStateOf(auth.currentUser) }
 
-                    // 2. Decide what screen to show based on login status
+                    // Decide what screen to show based on login status
                     if (currentUser == null) {
                         SignInScreen(onSignInSuccess = {
                             // Update state to trigger recomposition and load the main app
@@ -42,27 +46,6 @@ class MainActivity : ComponentActivity() {
                         HomeScreen(viewModel = viewModel)
                     }
                 }
-            }
-        }
-    }
-}
- setContent {
-    MyApplicationTheme {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            val auth = FirebaseAuth.getInstance()
-            
-            // 🔥 TEMPORARY LINE: Force sign out to test the login screen
-            auth.signOut() 
-            
-            var currentUser by remember { mutableStateOf(auth.currentUser) }
-
-            if (currentUser == null) {
-                SignInScreen(onSignInSuccess = {
-                    currentUser = auth.currentUser
-                })
-            } else {
-                val viewModel: DeviceViewModel = viewModel()
-                HomeScreen(viewModel = viewModel)
             }
         }
     }
