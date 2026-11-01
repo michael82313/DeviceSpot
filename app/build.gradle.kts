@@ -141,7 +141,7 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   // "ksp"(libs.moshi.kotlin.codegen)
 
-  // Added 2FA TOTP library authentication package
+  // Added 2FA TOTP library authentication library
   implementation("dev.samstevens.totp:totp:1.7.1")
 }
 
