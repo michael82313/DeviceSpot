@@ -15,6 +15,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.userProfileChangeRequest
+import kotlinx.coroutines.tasks.await
+
 sealed interface ScanLookupResult {
     data class Found(val device: Device, val formatName: String = "QR / Barcode") : ScanLookupResult
     data class Unknown(val rawCode: String, val formatName: String = "Barcode") : ScanLookupResult
@@ -23,9 +27,20 @@ sealed interface ScanLookupResult {
 class DeviceViewModel(
     private val repository: DeviceRepository,
     val currentUserId: String,
-    val userEmail: String = "",
-    val userDisplayName: String = ""
+    userEmail: String = "",
+    userDisplayName: String = ""
 ) : ViewModel() {
+
+    private val _userDisplayName = MutableStateFlow(userDisplayName)
+    val userDisplayNameState: StateFlow<String> = _userDisplayName.asStateFlow()
+    val userDisplayName: String get() = _userDisplayName.value
+
+    private val _userEmail = MutableStateFlow(userEmail)
+    val userEmailState: StateFlow<String> = _userEmail.asStateFlow()
+    val userEmail: String get() = _userEmail.value
+
+    private val _isEmailVerified = MutableStateFlow(FirebaseAuth.getInstance().currentUser?.isEmailVerified ?: false)
+    val isEmailVerified: StateFlow<Boolean> = _isEmailVerified.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -330,6 +345,107 @@ class DeviceViewModel(
             repository.deleteDevice(device)
             if (_selectedDeviceForDetail.value?.id == device.id) {
                 _selectedDeviceForDetail.value = null
+            }
+        }
+    }
+
+    fun updateDisplayName(newName: String, onResult: (Result<Unit>) -> Unit) {
+        val trimmed = newName.trim()
+        if (trimmed.isBlank()) {
+            onResult(Result.failure(IllegalArgumentException("Name cannot be empty")))
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val user = FirebaseAuth.getInstance().currentUser
+                if (user != null) {
+                    val profileUpdates = userProfileChangeRequest {
+                        displayName = trimmed
+                    }
+                    user.updateProfile(profileUpdates).await()
+                    user.reload().await()
+                    _userDisplayName.value = trimmed
+                    onResult(Result.success(Unit))
+                } else {
+                    onResult(Result.failure(IllegalStateException("No active user session")))
+                }
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    fun updatePassword(newPassword: String, onResult: (Result<Unit>) -> Unit) {
+        if (newPassword.length < 6) {
+            onResult(Result.failure(IllegalArgumentException("Password must be at least 6 characters")))
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val user = FirebaseAuth.getInstance().currentUser
+                if (user != null) {
+                    user.updatePassword(newPassword).await()
+                    onResult(Result.success(Unit))
+                } else {
+                    onResult(Result.failure(IllegalStateException("No active user session")))
+                }
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    fun sendEmailVerification(onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val user = FirebaseAuth.getInstance().currentUser
+                if (user != null) {
+                    user.sendEmailVerification().await()
+                    onResult(Result.success(Unit))
+                } else {
+                    onResult(Result.failure(IllegalStateException("No active user session")))
+                }
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    fun reloadUser(onResult: (isVerified: Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val user = FirebaseAuth.getInstance().currentUser
+                if (user != null) {
+                    user.reload().await()
+                    val verified = user.isEmailVerified
+                    _isEmailVerified.value = verified
+                    _userDisplayName.value = user.displayName ?: _userDisplayName.value
+                    _userEmail.value = user.email ?: _userEmail.value
+                    onResult(verified)
+                } else {
+                    onResult(false)
+                }
+            } catch (e: Exception) {
+                onResult(_isEmailVerified.value)
+            }
+        }
+    }
+
+    fun deleteAccount(onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val user = FirebaseAuth.getInstance().currentUser
+                if (user != null) {
+                    // Clean up user devices and audit logs
+                    repository.deleteAllUserData()
+                    // Delete the auth user
+                    user.delete().await()
+                    onResult(Result.success(Unit))
+                } else {
+                    onResult(Result.failure(IllegalStateException("No active user session")))
+                }
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
             }
         }
     }

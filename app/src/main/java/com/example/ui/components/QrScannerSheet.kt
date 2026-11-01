@@ -265,6 +265,20 @@ fun QrScannerSheet(
             Spacer(modifier = Modifier.height(10.dp))
 
             // Camera Viewfinder Box with ML Kit
+            var cameraInitError by remember { mutableStateOf<String?>(null) }
+            val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+            var cameraProviderRef by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+            var isFrontCamera by remember { mutableStateOf(false) }
+
+            androidx.compose.runtime.DisposableEffect(Unit) {
+                onDispose {
+                    try {
+                        cameraExecutor.shutdown()
+                        cameraProviderRef?.unbindAll()
+                    } catch (_: Exception) {}
+                }
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -274,67 +288,113 @@ fun QrScannerSheet(
                 contentAlignment = Alignment.Center
             ) {
                 if (hasCameraPermission) {
-                    AndroidView(
-                        factory = { ctx ->
-                            val previewView = PreviewView(ctx).apply {
-                                layoutParams = ViewGroup.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                    ViewGroup.LayoutParams.MATCH_PARENT
-                                )
-                                // Tap-to-focus on barcode
-                                setOnTouchListener { _, event ->
-                                    if (event.action == MotionEvent.ACTION_UP) {
-                                        val factory = meteringPointFactory
-                                        val point = factory.createPoint(event.x, event.y)
-                                        val action = FocusMeteringAction.Builder(point).build()
-                                        cameraControl?.cameraControl?.startFocusAndMetering(action)
-                                    }
-                                    true
-                                }
-                            }
-
-                            val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                            val cameraExecutor = Executors.newSingleThreadExecutor()
-
-                            cameraProviderFuture.addListener({
-                                val cameraProvider = cameraProviderFuture.get()
-                                val preview = Preview.Builder().build().also {
-                                    it.setSurfaceProvider(previewView.surfaceProvider)
-                                }
-
-                                val imageAnalysis = ImageAnalysis.Builder()
-                                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                    .build()
-                                    .also {
-                                        it.setAnalyzer(
-                                            cameraExecutor,
-                                            QrCodeAnalyzer { scannedContent, formatName ->
-                                                triggerHapticFeedback()
-                                                onCodeScanned(scannedContent, formatName)
-                                            }
-                                        )
-                                    }
-
-                                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
-                                try {
-                                    cameraProvider.unbindAll()
-                                    val boundCamera = cameraProvider.bindToLifecycle(
-                                        lifecycleOwner,
-                                        cameraSelector,
-                                        preview,
-                                        imageAnalysis
+                    if (cameraInitError != null) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.QrCodeScanner,
+                                contentDescription = null,
+                                tint = Color.LightGray,
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Camera hardware stream not available in this environment",
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Use 'Scan Barcode from Photo' or 'Manual Input' below to test any barcode format.",
+                                color = Color(0xFFB0BEC5),
+                                fontSize = 12.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        AndroidView(
+                            factory = { ctx ->
+                                val previewView = PreviewView(ctx).apply {
+                                    layoutParams = ViewGroup.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                        ViewGroup.LayoutParams.MATCH_PARENT
                                     )
-                                    cameraControl = boundCamera
-                                } catch (e: Exception) {
-                                    e.printStackTrace()
+                                    implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                                    scaleType = PreviewView.ScaleType.FILL_CENTER
+                                    // Tap-to-focus on barcode
+                                    setOnTouchListener { _, event ->
+                                        if (event.action == MotionEvent.ACTION_UP) {
+                                            val factory = meteringPointFactory
+                                            val point = factory.createPoint(event.x, event.y)
+                                            val action = FocusMeteringAction.Builder(point).build()
+                                            cameraControl?.cameraControl?.startFocusAndMetering(action)
+                                        }
+                                        true
+                                    }
                                 }
-                            }, ContextCompat.getMainExecutor(ctx))
 
-                            previewView
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+
+                                cameraProviderFuture.addListener({
+                                    try {
+                                        val cameraProvider = cameraProviderFuture.get()
+                                        cameraProviderRef = cameraProvider
+
+                                        val preview = Preview.Builder().build().also {
+                                            it.setSurfaceProvider(previewView.surfaceProvider)
+                                        }
+
+                                        val imageAnalysis = ImageAnalysis.Builder()
+                                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
+                                            .build()
+                                            .also {
+                                                it.setAnalyzer(
+                                                    cameraExecutor,
+                                                    QrCodeAnalyzer { scannedContent, formatName ->
+                                                        triggerHapticFeedback()
+                                                        onCodeScanned(scannedContent, formatName)
+                                                    }
+                                                )
+                                            }
+
+                                        val hasBack = cameraProvider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)
+                                        val hasFront = cameraProvider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)
+
+                                        val cameraSelector = when {
+                                            !isFrontCamera && hasBack -> CameraSelector.DEFAULT_BACK_CAMERA
+                                            isFrontCamera && hasFront -> CameraSelector.DEFAULT_FRONT_CAMERA
+                                            hasBack -> CameraSelector.DEFAULT_BACK_CAMERA
+                                            hasFront -> CameraSelector.DEFAULT_FRONT_CAMERA
+                                            else -> null
+                                        }
+
+                                        if (cameraSelector == null) {
+                                            cameraInitError = "No camera found on device"
+                                            return@addListener
+                                        }
+
+                                        cameraProvider.unbindAll()
+                                        val boundCamera = cameraProvider.bindToLifecycle(
+                                            lifecycleOwner,
+                                            cameraSelector,
+                                            preview,
+                                            imageAnalysis
+                                        )
+                                        cameraControl = boundCamera
+                                    } catch (e: Exception) {
+                                        cameraInitError = e.message ?: "Failed to start camera"
+                                    }
+                                }, ContextCompat.getMainExecutor(ctx))
+
+                                previewView
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
 
                     // Scanner Viewfinder Overlay (Rectangular to fit both wide 1D barcodes and square QR codes)
                     Box(

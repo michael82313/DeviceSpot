@@ -198,6 +198,21 @@ class DeviceRepository(
         }
     }
 
+    suspend fun deleteAllUserData() {
+        try {
+            val devDocs = devicesCollection.get().await()
+            for (doc in devDocs.documents) {
+                doc.reference.delete().await()
+            }
+            val logDocs = logsCollection.get().await()
+            for (doc in logDocs.documents) {
+                doc.reference.delete().await()
+            }
+        } catch (e: Exception) {
+            Log.w("DeviceRepository", "Failed to clean up user data before deletion", e)
+        }
+    }
+
     suspend fun seedInitialDevicesIfEmpty() {
         try {
             val snapshot = devicesCollection.limit(1).get().await()

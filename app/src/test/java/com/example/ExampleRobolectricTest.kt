@@ -67,4 +67,34 @@ class ExampleRobolectricTest {
         assertTrue("Must explicitly support UPC-A", formats.contains(Barcode.FORMAT_UPC_A))
         assertTrue("Must support Code 39", formats.contains(Barcode.FORMAT_CODE_39))
     }
+
+    @Test
+    fun `test zxing offline scanner decodes generated QR bitmap`() {
+        val testPayload = "DEV-9876"
+        val bitmap = QrCodeGenerator.generateQrBitmap(testPayload, 200)
+        assertNotNull(bitmap)
+        val decoded = QrCodeAnalyzer.scanBitmapWithZxing(bitmap!!)
+        assertNotNull(decoded)
+        assertEquals(testPayload, decoded?.first)
+        assertEquals("QR Code", decoded?.second)
+    }
+
+    @Test
+    fun `test zxing offline scanner decodes generated 1D barcode bitmap`() {
+        val testPayload = "DEV-1082"
+        val bitmap = QrCodeGenerator.generate1DBarcodeBitmap(testPayload, 300, 100)
+        assertNotNull(bitmap)
+        val decoded = QrCodeAnalyzer.scanBitmapWithZxing(bitmap!!)
+        assertNotNull(decoded)
+        assertEquals(testPayload, decoded?.first)
+        assertEquals("Code 128 Barcode", decoded?.second)
+    }
+
+    @Test
+    fun `test barcode format names mapping`() {
+        assertEquals("QR Code", QrCodeAnalyzer.getBarcodeFormatName(Barcode.FORMAT_QR_CODE))
+        assertEquals("Code 128 Barcode", QrCodeAnalyzer.getBarcodeFormatName(Barcode.FORMAT_CODE_128))
+        assertEquals("UPC-A Retail Barcode", QrCodeAnalyzer.getBarcodeFormatName(Barcode.FORMAT_UPC_A))
+        assertEquals("EAN-13 Product Barcode", QrCodeAnalyzer.getBarcodeFormatName(Barcode.FORMAT_EAN_13))
+    }
 }

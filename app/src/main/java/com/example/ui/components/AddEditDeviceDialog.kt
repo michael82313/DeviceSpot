@@ -10,10 +10,15 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -31,6 +36,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -131,49 +137,69 @@ fun AddEditDeviceDialog(
             onResetAiSuggestion()
             onDismiss()
         },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
-        Card(
+        Box(
             modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .padding(vertical = 24.dp)
-                .testTag("add_edit_device_dialog"),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                .fillMaxSize()
+                .systemBarsPadding()
+                .imePadding()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Column(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp)
-                    .verticalScroll(rememberScrollState())
+                    .fillMaxHeight(0.92f)
+                    .testTag("add_edit_device_dialog"),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
-                // Dialog Top Bar
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    Text(
-                        text = if (isEdit) "Edit Device" else "Register Device with QR/Barcode",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    IconButton(
-                        onClick = {
-                            onResetAiSuggestion()
-                            onDismiss()
-                        },
-                        modifier = Modifier.testTag("close_add_edit_dialog")
+                    // Dialog Top Bar (Pinned at top)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close"
+                        Text(
+                            text = if (isEdit) "Edit Device" else "Register Device with QR/Barcode",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
                         )
+                        IconButton(
+                            onClick = {
+                                onResetAiSuggestion()
+                                onDismiss()
+                            },
+                            modifier = Modifier.testTag("close_add_edit_dialog")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close"
+                            )
+                        }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    // Scrollable form inputs
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 20.dp, vertical = 16.dp)
+                    ) {
 
                 // QR / Barcode Code Field with Generate Button
                 OutlinedTextField(
@@ -521,54 +547,72 @@ fun AddEditDeviceDialog(
                         .testTag("device_notes_input")
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                }
 
-                // Action Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                // Pinned Action Bar at Bottom - Always visible, ample clearance above navigation bar
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 3.dp,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    OutlinedButton(
-                        onClick = {
-                            onResetAiSuggestion()
-                            onDismiss()
-                        },
-                        modifier = Modifier.testTag("cancel_save_device_btn")
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Cancel")
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Button(
-                        onClick = {
-                            if (name.isBlank()) {
-                                errorMessage = "Device name is required"
-                                return@Button
-                            }
-                            if (qrCode.isBlank()) {
-                                qrCode = QrCodeGenerator.generateUniqueCode()
-                            }
-                            val updatedDevice = (initialDevice ?: Device(qrCode = qrCode, name = name)).copy(
-                                name = name.trim(),
-                                model = model.trim(),
-                                qrCode = qrCode.trim(),
-                                category = category,
-                                storageLocation = storageLocation.trim().ifBlank { "Main Storage" },
-                                currentLocation = currentLocation.trim().ifBlank { storageLocation.trim() },
-                                status = status,
-                                assignedTo = assignedTo.trim(),
-                                notes = notes.trim(),
-                                colorTag = colorTag
+                        OutlinedButton(
+                            onClick = {
+                                onResetAiSuggestion()
+                                onDismiss()
+                            },
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .testTag("cancel_save_device_btn")
+                        ) {
+                            Text("Cancel")
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Button(
+                            onClick = {
+                                if (name.isBlank()) {
+                                    errorMessage = "Device name is required"
+                                    return@Button
+                                }
+                                if (qrCode.isBlank()) {
+                                    qrCode = QrCodeGenerator.generateUniqueCode()
+                                }
+                                val updatedDevice = (initialDevice ?: Device(qrCode = qrCode, name = name)).copy(
+                                    name = name.trim(),
+                                    model = model.trim(),
+                                    qrCode = qrCode.trim(),
+                                    category = category,
+                                    storageLocation = storageLocation.trim().ifBlank { "Main Storage" },
+                                    currentLocation = currentLocation.trim().ifBlank { storageLocation.trim() },
+                                    status = status,
+                                    assignedTo = assignedTo.trim(),
+                                    notes = notes.trim(),
+                                    colorTag = colorTag
+                                )
+                                onResetAiSuggestion()
+                                onSave(updatedDevice)
+                            },
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .testTag("confirm_save_device_btn")
+                        ) {
+                            Text(
+                                text = if (isEdit) "Save Changes" else "Register Device",
+                                fontWeight = FontWeight.Bold
                             )
-                            onResetAiSuggestion()
-                            onSave(updatedDevice)
-                        },
-                        modifier = Modifier.testTag("confirm_save_device_btn")
-                    ) {
-                        Text(if (isEdit) "Save Changes" else "Register Device")
+                        }
                     }
                 }
             }
         }
     }
+}
 }

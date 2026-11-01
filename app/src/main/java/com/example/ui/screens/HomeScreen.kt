@@ -60,6 +60,7 @@ import com.example.ui.components.QrCodePreviewDialog
 import com.example.ui.components.QrScannerSheet
 import com.example.ui.components.ScanResultDialog
 import com.example.ui.components.UpdateLocationDialog
+import com.example.ui.components.UserSettingsDialog
 import com.example.ui.viewmodel.DeviceViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -395,133 +396,13 @@ fun HomeScreen(
         )
     }
 
-    // Modal: Account & Multi-Device Sync Dialog
+    // Modal: User Settings (Account details, Email verification, Delete account)
     if (isAccountDialogOpen) {
-        AccountSyncDialog(
-            userEmail = viewModel.userEmail,
-            userDisplayName = viewModel.userDisplayName,
+        UserSettingsDialog(
+            viewModel = viewModel,
             deviceCount = allDevices.size,
             onSignOut = onSignOut,
             onDismiss = { isAccountDialogOpen = false }
         )
     }
-}
-
-@Composable
-fun AccountSyncDialog(
-    userEmail: String,
-    userDisplayName: String,
-    deviceCount: Int,
-    onSignOut: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.CloudDone,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "Account & Cloud Sync",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            text = userDisplayName.ifBlank { "Signed In User" },
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (userEmail.isNotBlank()) {
-                            Text(
-                                text = userEmail,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = Color(0xFF00E676),
-                            modifier = Modifier.size(10.dp)
-                        ) {}
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "Live Multi-Device Sync: Active",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "$deviceCount items synced across all your devices",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                Text(
-                    text = "All your QR codes, barcodes, storage shelves, and movement history are backed up and live-synced in real-time across all your phones, tablets, and workstations.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.testTag("account_dialog_close_btn")
-            ) {
-                Text("Done")
-            }
-        },
-        dismissButton = {
-            Button(
-                onClick = {
-                    onDismiss()
-                    onSignOut()
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error,
-                    contentColor = MaterialTheme.colorScheme.onError
-                ),
-                modifier = Modifier.testTag("sign_out_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Logout,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Sign Out")
-            }
-        }
-    )
 }

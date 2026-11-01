@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -83,7 +84,7 @@ fun DevicesTab(
         modifier = modifier
             .fillMaxSize()
             .testTag("devices_tab_list"),
-        contentPadding = PaddingValues(bottom = 96.dp)
+        contentPadding = PaddingValues(bottom = 128.dp)
     ) {
         // Hero Visual Banner with App Summary
         item {
@@ -349,15 +350,18 @@ fun DevicesTab(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(18.dp))
                         Button(
                             onClick = onAddDeviceClick,
-                            modifier = Modifier.testTag("empty_state_add_device_btn")
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .testTag("empty_state_add_device_btn")
                         ) {
-                            Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Register Device")
+                            Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Register Device", fontWeight = FontWeight.Bold)
                         }
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
             }
