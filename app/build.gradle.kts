@@ -81,11 +81,9 @@ secrets {
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
 
-// Some unused dependencies are commented out below instead of being removed.
-// This makes it easy to add them back in the future if needed.
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
-  implementation(platform(libs.firebase.bom))
+  // implementation(platform(libs.firebase.bom)) // Commented out to prioritize Supabase identity routing
   // implementation(libs.accompanist.permissions)
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.camera.camera2)
@@ -112,10 +110,12 @@ dependencies {
   // implementation(libs.coil.compose)
   // implementation(libs.converter.moshi)
   implementation(libs.firebase.firestore)
-  implementation(libs.firebase.auth)
+  
+  // NATIVE CREDENTIAL MANAGERS FOR PASSKEYS / WEBAUTHN
   implementation(libs.androidx.credentials)
   implementation(libs.androidx.credentials.play.services)
   implementation(libs.googleid)
+  
   implementation(libs.firebase.ai)
   implementation(libs.firebase.appcheck.recaptcha)
   implementation(libs.firebase.appcheck.debug)
@@ -141,8 +141,10 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   // "ksp"(libs.moshi.kotlin.codegen)
 
-  // Added 2FA TOTP library authentication library
-  implementation("dev.samstevens.totp:totp:1.7.1")
+  // SUPABASE DEPENDENCIES FOR PASSKEYS AND MFA 2FA
+  implementation(platform("io.github.jan-tennert.supabase:bom:3.1.1"))
+  implementation("io.github.jan-tennert.supabase:auth-kt")
+  implementation("io.ktor:ktor-client-android:3.0.1") // Handles Supabase network queries inside Android
 }
 
 tasks.withType<Test> {
