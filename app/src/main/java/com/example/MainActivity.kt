@@ -28,6 +28,7 @@ import com.example.ui.screens.TwoFactorSetupScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.DeviceViewModel
 import com.example.util.MfaSecurity
+import com.example.util.SecuritySettings
 import com.example.util.configureAppCheck
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -60,6 +61,11 @@ class MainActivity : ComponentActivity() {
                         }
 
                         val context = LocalContext.current
+                        if (!SecuritySettings.is2FAEnabled(context)) {
+                            mfaState = MfaScreenState.Verified
+                            return@LaunchedEffect
+                        }
+
                         val databaseId = context.getString(R.string.firestore_database_id)
                         val db = FirebaseFirestore.getInstance(databaseId)
                         val hasSecret = MfaSecurity.fetchTotpSecret(db, user.uid) != null

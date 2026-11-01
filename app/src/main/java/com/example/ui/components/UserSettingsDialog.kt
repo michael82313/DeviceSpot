@@ -53,6 +53,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -77,6 +78,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.viewmodel.DeviceViewModel
+import com.example.util.SecuritySettings
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
@@ -101,6 +103,8 @@ fun UserSettingsDialog(
 
     var displayNameInput by remember(currentDisplayName) { mutableStateOf(currentDisplayName) }
     var isUpdatingName by remember { mutableStateOf(false) }
+    var isTwoFactorEnabled by remember { mutableStateOf(SecuritySettings.is2FAEnabled(context)) }
+    var isPasskeysEnabled by remember { mutableStateOf(SecuritySettings.isPasskeysEnabled(context)) }
 
     // Password change state
     var showPasswordForm by remember { mutableStateOf(false) }
@@ -214,12 +218,10 @@ fun UserSettingsDialog(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Verification and Sync Badges
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Email Verification Badge
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = if (isEmailVerified) Color(0xFFE8F5E9) else Color(0xFFFFF3E0),
@@ -245,7 +247,6 @@ fun UserSettingsDialog(
                             }
                         }
 
-                        // Cloud Sync Badge
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
@@ -270,6 +271,89 @@ fun UserSettingsDialog(
                                 )
                             }
                         }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Security",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("2-Step Verification")
+                            Text(
+                                text = if (isTwoFactorEnabled) "Required for sign in" else "Currently off",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Switch(
+                            checked = isTwoFactorEnabled,
+                            onCheckedChange = {
+                                isTwoFactorEnabled = it
+                                SecuritySettings.set2FAEnabled(context, it)
+                                Toast.makeText(
+                                    context,
+                                    if (it) "2-step verification enabled" else "2-step verification disabled",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Passkeys")
+                            Text(
+                                text = if (isPasskeysEnabled) "Passkey sign-in is enabled" else "Passkey sign-in is off",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Switch(
+                            checked = isPasskeysEnabled,
+                            onCheckedChange = {
+                                isPasskeysEnabled = it
+                                SecuritySettings.setPasskeysEnabled(context, it)
+                                Toast.makeText(
+                                    context,
+                                    if (it) "Passkeys enabled for this device" else "Passkeys disabled",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        )
                     }
                 }
             }
@@ -343,7 +427,6 @@ fun UserSettingsDialog(
                         }
                     }
 
-                    // Optional password change section if email/password user
                     if (isPasswordUser) {
                         Spacer(modifier = Modifier.height(10.dp))
                         TextButton(
@@ -454,7 +537,6 @@ fun UserSettingsDialog(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // SECTION 2: Verify Email Section
             Card(
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
@@ -599,7 +681,6 @@ fun UserSettingsDialog(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // SECTION 3: Delete Account (Danger Zone)
             Card(
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)),
@@ -656,7 +737,6 @@ fun UserSettingsDialog(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Sign Out Button
             OutlinedButton(
                 onClick = {
                     onDismiss()
@@ -675,7 +755,6 @@ fun UserSettingsDialog(
         }
     }
 
-    // Confirmation Dialog for Account Deletion
     if (showDeleteConfirmDialog) {
         AlertDialog(
             onDismissRequest = {
