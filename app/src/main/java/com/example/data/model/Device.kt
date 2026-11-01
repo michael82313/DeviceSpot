@@ -54,15 +54,7 @@ data class Device(
         )
 
         val DEFAULT_LOCATIONS = listOf(
-            "Lab Shelf 1A",
-            "Lab Shelf 2B",
             "Office Desk Drawer",
-            "Workbench Pegboard",
-            "Pelican Case #01",
-            "Storage Bin A (Hardware)",
-            "Living Room Media Console",
-            "Backpack North Face",
-            "Conference Room Cart"
         )
     }
 }
