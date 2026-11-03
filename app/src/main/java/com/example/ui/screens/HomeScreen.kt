@@ -194,36 +194,55 @@ fun HomeScreen(
             )
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
             ) {
-                NavigationBarItem(
-                    selected = currentTab == 0,
-                    onClick = { currentTab = 0 },
-                    icon = {
-                        Icon(imageVector = Icons.Default.Devices, contentDescription = "Devices")
-                    },
-                    label = { Text("Devices") },
-                    modifier = Modifier.testTag("nav_item_devices")
-                )
-                NavigationBarItem(
-                    selected = currentTab == 1,
-                    onClick = { currentTab = 1 },
-                    icon = {
-                        Icon(imageVector = Icons.Default.Place, contentDescription = "Locations")
-                    },
-                    label = { Text("Locations") },
-                    modifier = Modifier.testTag("nav_item_locations")
-                )
-                NavigationBarItem(
-                    selected = currentTab == 2,
-                    onClick = { currentTab = 2 },
-                    icon = {
-                        Icon(imageVector = Icons.Default.History, contentDescription = "Audit Log")
-                    },
-                    label = { Text("Audit Log") },
-                    modifier = Modifier.testTag("nav_item_audit_log")
-                )
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ) {
+                    NavigationBarItem(
+                        selected = currentTab == 0,
+                        onClick = { currentTab = 0 },
+                        icon = {
+                            Icon(imageVector = Icons.Default.Devices, contentDescription = "Devices")
+                        },
+                        label = { Text("Devices") },
+                        modifier = Modifier.testTag("nav_item_devices")
+                    )
+                    NavigationBarItem(
+                        selected = currentTab == 1,
+                        onClick = { currentTab = 1 },
+                        icon = {
+                            Icon(imageVector = Icons.Default.Place, contentDescription = "Locations")
+                        },
+                        label = { Text("Locations") },
+                        modifier = Modifier.testTag("nav_item_locations")
+                    )
+                    NavigationBarItem(
+                        selected = currentTab == 2,
+                        onClick = { currentTab = 2 },
+                        icon = {
+                            Icon(imageVector = Icons.Default.History, contentDescription = "Audit Log")
+                        },
+                        label = { Text("Audit Log") },
+                        modifier = Modifier.testTag("nav_item_audit_log")
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "DeviceSpot v${com.example.BuildConfig.VERSION_NAME} (Build ${com.example.BuildConfig.VERSION_CODE})",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                        modifier = Modifier.testTag("home_app_version")
+                    )
+                }
             }
         },
         floatingActionButton = {

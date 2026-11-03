@@ -26,6 +26,7 @@ import com.example.ui.screens.SignInScreen
 import com.example.ui.screens.TwoFactorScreen
 import com.example.ui.screens.TwoFactorSetupScreen
 import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.ThemePreferences
 import com.example.ui.viewmodel.DeviceViewModel
 import com.example.util.MfaSecurity
 import com.example.util.SecuritySettings
@@ -44,6 +45,7 @@ private enum class MfaScreenState {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemePreferences.init(this)
         configureAppCheck(this, intent)
         enableEdgeToEdge()
 
