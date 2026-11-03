@@ -98,7 +98,7 @@ fun TwoFactorSetupScreen(
 
     LaunchedEffect(userUid) {
         val existingSecret = MfaSecurity.fetchTotpSecret(db, userUid)
-        val selectedSecret = if (!existingSecret.isNullOrBlank()) {
+        val selectedSecret = if (!existingSecret.isNullOrBlank() && MfaSecurity.isBase32Secret(existingSecret)) {
             existingSecret
         } else {
             MfaSecurity.generateSecret().also { newSec ->
@@ -258,6 +258,28 @@ fun TwoFactorSetupScreen(
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    TextButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                val newSec = MfaSecurity.generateSecret()
+                                MfaSecurity.saveTotpSecret(db, userUid, newSec)
+                                secret = newSec
+                                val otpUri = MfaSecurity.getOtpAuthUri(userEmail, newSec)
+                                qrBitmap = QrCodeGenerator.generateQrBitmap(otpUri, size = 380)
+                                code = ""
+                                error = null
+                                Toast.makeText(context, "New 2FA key & QR code generated!", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Reset / Generate New Key", fontSize = 12.sp)
                     }
                 }
             }

@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import com.example.util.MfaSecurity
@@ -88,7 +89,11 @@ import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthMultiFactorException
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.MultiFactorResolver
+import com.google.firebase.auth.TotpMultiFactorGenerator
+import com.google.firebase.auth.TotpMultiFactorInfo
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -120,6 +125,12 @@ fun SignInScreen(
     var showPasskeyDeviceDialog by remember { mutableStateOf(false) }
     var passkeyDeviceEmailInput by remember { mutableStateOf("") }
     var pendingPasskeyEmail by remember { mutableStateOf<String?>(null) }
+
+    var showMfaChallengeDialog by remember { mutableStateOf(false) }
+    var pendingMfaResolver by remember { mutableStateOf<MultiFactorResolver?>(null) }
+    var mfaChallengeCode by remember { mutableStateOf("") }
+    var mfaChallengeError by remember { mutableStateOf<String?>(null) }
+    var isResolvingMfa by remember { mutableStateOf(false) }
 
     val passkeyLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -236,6 +247,12 @@ fun SignInScreen(
                     auth.signInWithEmailAndPassword(trimmedEmail, trimmedPassword).await()
                 }
                 onSignInSuccess()
+            } catch (e: FirebaseAuthMultiFactorException) {
+                Log.w("SignInScreen", "Second factor challenge required for email auth", e)
+                pendingMfaResolver = e.resolver
+                mfaChallengeCode = ""
+                mfaChallengeError = null
+                showMfaChallengeDialog = true
             } catch (e: Exception) {
                 Log.e("SignInScreen", "Email auth failed", e)
                 errorMessage = e.localizedMessage ?: "Authentication failed. Please verify your credentials."
@@ -280,6 +297,12 @@ fun SignInScreen(
             } catch (e: GetCredentialException) {
                 Log.e("SignInScreen", "CredentialManager exception", e)
                 errorMessage = e.localizedMessage ?: "Google Sign-In failed."
+            } catch (e: FirebaseAuthMultiFactorException) {
+                Log.w("SignInScreen", "Second factor challenge required for Google auth", e)
+                pendingMfaResolver = e.resolver
+                mfaChallengeCode = ""
+                mfaChallengeError = null
+                showMfaChallengeDialog = true
             } catch (e: Exception) {
                 Log.e("SignInScreen", "Sign-in error", e)
                 errorMessage = e.localizedMessage ?: "Failed to sign in. Please try again."
@@ -977,6 +1000,172 @@ fun SignInScreen(
                     modifier = Modifier.testTag("passkey_recovery_ticket_btn")
                 ) {
                     Text("Recovery Ticket")
+                }
+            }
+        )
+    }
+
+    if (showMfaChallengeDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isResolvingMfa) {
+                    showMfaChallengeDialog = false
+                    pendingMfaResolver = null
+                }
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Security,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "2-Step Verification Challenge",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        text = "This account requires a second-factor verification code to finish signing in.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    OutlinedTextField(
+                        value = mfaChallengeCode,
+                        onValueChange = {
+                            mfaChallengeCode = it.filter { ch -> ch.isDigit() }.take(6)
+                            if (mfaChallengeError != null) mfaChallengeError = null
+                        },
+                        label = { Text("6-Digit Verification Code") },
+                        placeholder = { Text("123456") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("mfa_challenge_code_input")
+                    )
+
+                    if (mfaChallengeError != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = mfaChallengeError ?: "",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    HorizontalDivider()
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "Cannot access your authenticator?",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "If you lost your 2FA device or backup codes, submit an account recovery ticket below or ask your administrator to remove MFA in Firebase Console under Authentication > Users > ⋮ > 'Configure MFA'.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            MfaSecurity.openSupportTicket(context)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("mfa_challenge_recovery_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.OpenInNew,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Submit Recovery Ticket", fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val resolver = pendingMfaResolver ?: return@Button
+                        val cleanCode = mfaChallengeCode.filter { it.isDigit() }
+                        if (cleanCode.length != 6) {
+                            mfaChallengeError = "Please enter all 6 digits."
+                            return@Button
+                        }
+
+                        isResolvingMfa = true
+                        mfaChallengeError = null
+
+                        coroutineScope.launch {
+                            try {
+                                val totpHint = resolver.hints.filterIsInstance<TotpMultiFactorInfo>().firstOrNull()
+                                val assertion = if (totpHint != null) {
+                                    TotpMultiFactorGenerator.getAssertionForSignIn(totpHint.uid, cleanCode)
+                                } else {
+                                    val firstHint = resolver.hints.firstOrNull()
+                                    if (firstHint is TotpMultiFactorInfo) {
+                                        TotpMultiFactorGenerator.getAssertionForSignIn(firstHint.uid, cleanCode)
+                                    } else {
+                                        throw IllegalStateException("Second factor format not supported directly. Please use account recovery.")
+                                    }
+                                }
+                                resolver.resolveSignIn(assertion).await()
+                                showMfaChallengeDialog = false
+                                pendingMfaResolver = null
+                                onSignInSuccess()
+                            } catch (ex: Exception) {
+                                Log.e("SignInScreen", "MFA resolution failed", ex)
+                                mfaChallengeError = ex.localizedMessage ?: "Invalid verification code. Please check your authenticator and try again."
+                            } finally {
+                                isResolvingMfa = false
+                            }
+                        }
+                    },
+                    enabled = !isResolvingMfa && mfaChallengeCode.length == 6,
+                    modifier = Modifier.testTag("mfa_challenge_confirm_btn")
+                ) {
+                    if (isResolvingMfa) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Verifying...")
+                    } else {
+                        Text("Verify & Sign In")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        if (!isResolvingMfa) {
+                            showMfaChallengeDialog = false
+                            pendingMfaResolver = null
+                        }
+                    },
+                    enabled = !isResolvingMfa
+                ) {
+                    Text("Cancel")
                 }
             }
         )

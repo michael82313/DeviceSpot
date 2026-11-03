@@ -135,22 +135,69 @@ object MfaSecurity {
         }
     }
 
+    object Base32 {
+        private const val ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+
+        fun encode(data: ByteArray): String {
+            val result = StringBuilder((data.size * 8 + 4) / 5)
+            var buffer = 0
+            var bitsLeft = 0
+            for (b in data) {
+                buffer = (buffer shl 8) or (b.toInt() and 0xFF)
+                bitsLeft += 8
+                while (bitsLeft >= 5) {
+                    val index = (buffer ushr (bitsLeft - 5)) and 0x1F
+                    result.append(ALPHABET[index])
+                    bitsLeft -= 5
+                    buffer = buffer and ((1 shl bitsLeft) - 1)
+                }
+            }
+            if (bitsLeft > 0) {
+                val index = (buffer shl (5 - bitsLeft)) and 0x1F
+                result.append(ALPHABET[index])
+            }
+            return result.toString()
+        }
+
+        fun decode(encoded: String): ByteArray {
+            val clean = encoded.replace(" ", "").replace("-", "").trim().uppercase()
+            val result = java.io.ByteArrayOutputStream()
+            var buffer = 0
+            var bitsLeft = 0
+            for (ch in clean) {
+                val value = ALPHABET.indexOf(ch)
+                if (value == -1) continue
+                buffer = (buffer shl 5) or value
+                bitsLeft += 5
+                while (bitsLeft >= 8) {
+                    result.write((buffer ushr (bitsLeft - 8)) and 0xFF)
+                    bitsLeft -= 8
+                    buffer = buffer and ((1 shl bitsLeft) - 1)
+                }
+            }
+            return result.toByteArray()
+        }
+    }
+
+    fun isBase32Secret(secret: String): Boolean {
+        val clean = secret.replace(" ", "").replace("-", "").trim().uppercase()
+        if (clean.length < 16) return false
+        return clean.all { it in "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567" }
+    }
+
     fun generateSecret(): String {
         val random = SecureRandom()
-        val bytes = ByteArray(20)
+        val bytes = ByteArray(20) // 160 bits (standard HMAC-SHA1 seed)
         random.nextBytes(bytes)
-        return Base64.encodeToString(bytes, Base64.NO_WRAP or Base64.NO_PADDING)
-            .replace("=", "")
-            .replace("+", "")
-            .replace("/", "")
-            .uppercase()
-            .take(32)
+        return Base32.encode(bytes) // Exactly 32 characters in Base32 (A-Z, 2-7)
     }
 
     fun getOtpAuthUri(email: String, secret: String, issuer: String = "DeviceSpot"): String {
-        val encodedEmail = java.net.URLEncoder.encode(email.ifBlank { "User" }, "UTF-8")
-        val encodedIssuer = java.net.URLEncoder.encode(issuer, "UTF-8")
-        return "otpauth://totp/$encodedIssuer:$encodedEmail?secret=$secret&issuer=$encodedIssuer&algorithm=SHA1&digits=6&period=30"
+        val cleanSecret = secret.replace(" ", "").replace("-", "").uppercase()
+        val cleanEmail = email.ifBlank { "User" }
+        val encodedEmail = java.net.URLEncoder.encode(cleanEmail, "UTF-8").replace("+", "%20")
+        val encodedIssuer = java.net.URLEncoder.encode(issuer, "UTF-8").replace("+", "%20")
+        return "otpauth://totp/$encodedIssuer:$encodedEmail?secret=$cleanSecret&issuer=$encodedIssuer&algorithm=SHA1&digits=6&period=30"
     }
 
     fun verifyCode(secret: String, code: String): Boolean {
@@ -158,13 +205,28 @@ object MfaSecurity {
         if (normalized.length != 6) return false
 
         return try {
-            val secretBytes = Base64.decode(secret, Base64.NO_WRAP)
+            val cleanSecret = secret.replace(" ", "").replace("-", "").trim().uppercase()
+            val secretBytes = if (isBase32Secret(cleanSecret)) {
+                Base32.decode(cleanSecret)
+            } else {
+                // Backward compatibility fallback for legacy Base64 stored secrets
+                try {
+                    Base64.decode(cleanSecret, Base64.NO_WRAP)
+                } catch (e: Exception) {
+                    Base32.decode(cleanSecret)
+                }
+            }
+
+            if (secretBytes.isEmpty()) return false
+
             val timeCounter = System.currentTimeMillis() / 30_000L
 
-            listOf(0L, -1L, 1L).any { offset ->
+            // Allow up to +/- 60 seconds time drift (current, -1, +1, -2, +2)
+            listOf(0L, -1L, 1L, -2L, 2L).any { offset ->
                 generateTotp(secretBytes, timeCounter + offset) == normalized
             }
         } catch (e: Exception) {
+            e.printStackTrace()
             false
         }
     }
