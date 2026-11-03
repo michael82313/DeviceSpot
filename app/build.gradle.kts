@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.devicespot.kqztv"
     minSdk = 24
     targetSdk = 36
-    versionCode = 4
-    versionName = "4.0"
+    versionCode = 5
+    versionName = "5.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -68,6 +68,20 @@ android {
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true
+  }
+  packaging {
+    resources {
+      excludes += setOf(
+        "/META-INF/{AL2.0,LGPL2.1}",
+        "META-INF/DEPENDENCIES",
+        "META-INF/LICENSE",
+        "META-INF/LICENSE.txt",
+        "META-INF/license.txt",
+        "META-INF/NOTICE",
+        "META-INF/NOTICE.txt",
+        "META-INF/notice.txt"
+      )
+    }
   }
 }
 
@@ -121,8 +135,8 @@ dependencies {
   implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
-  implementation("com.yubico:webauthn-server-core:2.5.0") // Passkeys  
-  implementation("org.jboss.aerogear:aerogear-otp-java:1.0.0") // TOTP 2FA
+  // implementation("com.yubico:webauthn-server-core:2.5.0") // Passkeys  
+  // implementation("org.jboss.aerogear:aerogear-otp-java:1.0.0") // TOTP 2FA
   // implementation(libs.logging.interceptor)
   // implementation(libs.moshi.kotlin)
   // implementation(libs.okhttp)

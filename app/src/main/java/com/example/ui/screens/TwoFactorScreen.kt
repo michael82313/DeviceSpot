@@ -18,6 +18,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,7 +46,9 @@ fun TwoFactorScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var secret by remember { mutableStateOf("") }
 
-    secret = MfaSecurity.fetchTotpSecret(db, userUid).let { if (it == null) "" else it }
+    LaunchedEffect(userUid) {
+        secret = MfaSecurity.fetchTotpSecret(db, userUid) ?: ""
+    }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(

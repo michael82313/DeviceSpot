@@ -50,6 +50,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MyApplicationTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
+                    val context = LocalContext.current
                     val auth = FirebaseAuth.getInstance()
                     var currentUser by remember { mutableStateOf<FirebaseUser?>(auth.currentUser) }
                     var mfaState by remember(currentUser?.uid) { mutableStateOf(MfaScreenState.Loading) }
@@ -60,7 +61,6 @@ class MainActivity : ComponentActivity() {
                             return@LaunchedEffect
                         }
 
-                        val context = LocalContext.current
                         if (!SecuritySettings.is2FAEnabled(context)) {
                             mfaState = MfaScreenState.Verified
                             return@LaunchedEffect
@@ -77,9 +77,6 @@ class MainActivity : ComponentActivity() {
                             SignInScreen(
                                 onSignInSuccess = {
                                     currentUser = auth.currentUser
-                                },
-                                onPasskeyVerificationCompleted = {
-                                    android.util.Log.d("MainActivity", "Passkey payload: $it")
                                 }
                             )
                         }

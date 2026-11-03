@@ -1,3 +1,19 @@
+package com.example.ai
+
+import android.util.Log
+import com.example.data.model.Device
+import com.example.data.model.DeviceLocationLog
+import com.google.firebase.Firebase
+import com.google.firebase.ai.ai
+import com.google.firebase.ai.type.Schema
+import com.google.firebase.ai.type.generationConfig
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 
 private const val TAG = "DeviceAiAssistant"
@@ -29,7 +45,7 @@ class DeviceAiAssistant {
     // Lazy initialization of structured model
     private val structuredModel by lazy {
         Firebase.ai.generativeModel(
-            modelName = "gemini-3.8-flash",
+            modelName = "gemini-2.5-flash",
             generationConfig = generationConfig {
                 responseMimeType = "application/json"
                 responseSchema = deviceSuggestionSchema
@@ -41,7 +57,7 @@ class DeviceAiAssistant {
     // Lazy initialization of chat / Q&A assistant model
     private val assistantModel by lazy {
         Firebase.ai.generativeModel(
-            modelName = "gemini-3.8-flash",
+            modelName = "gemini-2.5-flash",
             generationConfig = generationConfig {
                 temperature = 0.4f
             }
@@ -49,7 +65,7 @@ class DeviceAiAssistant {
     }
 
     /**
-     * Uses Gemini 3.8 Flash to analyze a device and recommend optimal storage spot, category, and accessories.
+     * Uses Gemini to analyze a device and recommend optimal storage spot, category, and accessories.
      */
     suspend fun suggestDeviceDetails(
         deviceName: String,
@@ -92,3 +108,57 @@ class DeviceAiAssistant {
                     handlingTip = tip
                 )
             )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Error generating device details suggestion", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Streams responses to user questions regarding device locations, audit logs, and hardware whereabouts.
+     */
+    fun askLocatorStream(
+        userQuestion: String,
+        devices: List<Device>,
+        recentLogs: List<DeviceLocationLog>
+    ): Flow<String> = flow {
+        val inventorySummary = buildString {
+            appendLine("=== Current Device Inventory ===")
+            if (devices.isEmpty()) {
+                appendLine("No devices currently registered.")
+            } else {
+                devices.forEach { d ->
+                    appendLine("- [${d.name}] (${d.model.ifBlank { "No model" }}), Category: ${d.category}, Status: ${d.status}, Current Location: ${d.currentLocation}, Storage Location: ${d.storageLocation}, Assigned To: ${d.assignedTo.ifBlank { "None" }}, Barcode/QR: ${d.qrCode}")
+                }
+            }
+            appendLine("\n=== Recent Movement & Location Logs (Latest 20) ===")
+            if (recentLogs.isEmpty()) {
+                appendLine("No recent movement logs.")
+            } else {
+                recentLogs.take(20).forEach { log ->
+                    appendLine("- Device: ${log.deviceName.ifBlank { log.deviceId }}, ${log.fromLocation} -> ${log.toLocation}, Action: ${log.action}, By: ${log.actor}, Note: ${log.note.ifBlank { "None" }}")
+                }
+            }
+        }
+
+        val prompt = """
+            You are DeviceSpot Locator AI, an intelligent hardware asset management assistant.
+            Use the current inventory and recent audit logs below to answer the user's question accurately.
+            Be concise, helpful, and reference the specific device name and current location.
+
+            $inventorySummary
+
+            User Question: $userQuestion
+        """.trimIndent()
+
+        val responseStream = assistantModel.generateContentStream(prompt)
+        responseStream.collect { chunk ->
+            val text = chunk.text
+            if (!text.isNullOrEmpty()) {
+                emit(text)
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+}
