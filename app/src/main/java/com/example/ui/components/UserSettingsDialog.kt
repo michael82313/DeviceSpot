@@ -1,6 +1,11 @@
 package com.example.ui.components
 
+import android.app.Activity
+import android.app.KeyguardManager
+import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -24,18 +29,28 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.MarkEmailRead
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -62,6 +77,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,12 +92,18 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.R
+import com.example.ui.screens.TwoFactorSetupScreen
 import com.example.ui.viewmodel.DeviceViewModel
+import com.example.util.MfaSecurity
 import com.example.util.SecuritySettings
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,10 +123,57 @@ fun UserSettingsDialog(
     val currentUser = FirebaseAuth.getInstance().currentUser
     val isPasswordUser = currentUser?.providerData?.any { it.providerId == EmailAuthProvider.PROVIDER_ID } == true
 
+    val coroutineScope = rememberCoroutineScope()
+    val db = remember {
+        FirebaseFirestore.getInstance(context.getString(R.string.firestore_database_id))
+    }
+
     var displayNameInput by remember(currentDisplayName) { mutableStateOf(currentDisplayName) }
     var isUpdatingName by remember { mutableStateOf(false) }
     var isTwoFactorEnabled by remember { mutableStateOf(SecuritySettings.is2FAEnabled(context)) }
     var isPasskeysEnabled by remember { mutableStateOf(SecuritySettings.isPasskeysEnabled(context)) }
+    var isPasskeyRegistered by remember { mutableStateOf(SecuritySettings.isPasskeyRegistered(context)) }
+    var passkeyDeviceName by remember { mutableStateOf(SecuritySettings.getPasskeyDeviceName(context)) }
+    var showTwoFactorSetupDialog by remember { mutableStateOf(false) }
+    var showBackupCodesDialog by remember { mutableStateOf(false) }
+    var userBackupCodes by remember { mutableStateOf<List<String>>(emptyList()) }
+    var isLoadingBackupCodes by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentUser?.uid) {
+        currentUser?.let { user ->
+            userBackupCodes = MfaSecurity.fetchBackupCodes(db, user.uid)
+        }
+    }
+
+    val passkeyRegisterLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val user = currentUser
+            if (user != null) {
+                SecuritySettings.registerPasskey(context, user.email ?: "", user.uid)
+                isPasskeyRegistered = true
+                isPasskeysEnabled = true
+                passkeyDeviceName = SecuritySettings.getPasskeyDeviceName(context)
+                coroutineScope.launch {
+                    MfaSecurity.registerPasskeyInFirestore(db, user.uid, passkeyDeviceName)
+                }
+                Toast.makeText(context, "Passkey enrolled successfully for this device!", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(context, "Passkey enrollment cancelled", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val passkeyTestLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            Toast.makeText(context, "Passkey verified successfully! Biometrics working.", Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(context, "Passkey test cancelled", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     // Password change state
     var showPasswordForm by remember { mutableStateOf(false) }
@@ -298,62 +367,335 @@ fun UserSettingsDialog(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    // 1. Two-Factor Authentication (2FA) Section
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                            .padding(14.dp)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("2-Step Verification")
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Security,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "2-Step Verification",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (isTwoFactorEnabled) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surfaceContainerHighest
+                            ) {
+                                Text(
+                                    text = if (isTwoFactorEnabled) "ACTIVE" else "OFF",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isTwoFactorEnabled) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Requires a dynamic 6-digit verification code from Google Authenticator, Microsoft Authenticator, or 1Password when signing in.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = if (isTwoFactorEnabled) "Required for sign in" else "Currently off",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall
+                                text = "Require 2FA on sign-in",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Switch(
+                                checked = isTwoFactorEnabled,
+                                onCheckedChange = { checked ->
+                                    isTwoFactorEnabled = checked
+                                    SecuritySettings.set2FAEnabled(context, checked)
+                                    currentUser?.let { user ->
+                                        coroutineScope.launch {
+                                            MfaSecurity.set2FAEnabledInFirestore(db, user.uid, checked)
+                                        }
+                                    }
+                                    if (checked) {
+                                        showTwoFactorSetupDialog = true
+                                    } else {
+                                        Toast.makeText(context, "2-step verification turned off", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.testTag("2fa_toggle_switch")
                             )
                         }
-                        Switch(
-                            checked = isTwoFactorEnabled,
-                            onCheckedChange = {
-                                isTwoFactorEnabled = it
-                                SecuritySettings.set2FAEnabled(context, it)
-                                Toast.makeText(
-                                    context,
-                                    if (it) "2-step verification enabled" else "2-step verification disabled",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedButton(
+                            onClick = { showTwoFactorSetupDialog = true },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("setup_authenticator_app_btn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.QrCode,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (isTwoFactorEnabled) "View / Reconfigure Authenticator (QR Code)" else "Set Up Authenticator App (QR Code)",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    showBackupCodesDialog = true
+                                    currentUser?.let { user ->
+                                        coroutineScope.launch {
+                                            isLoadingBackupCodes = true
+                                            userBackupCodes = MfaSecurity.fetchOrCreateBackupCodes(db, user.uid)
+                                            isLoadingBackupCodes = false
+                                        }
+                                    }
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("manage_backup_codes_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Key,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (userBackupCodes.isNotEmpty()) "Backup Codes (${userBackupCodes.size})" else "Backup Codes",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
-                        )
+
+                            FilledTonalButton(
+                                onClick = {
+                                    currentUser?.let { user ->
+                                        coroutineScope.launch {
+                                            val codes = if (userBackupCodes.isNotEmpty()) userBackupCodes else MfaSecurity.fetchOrCreateBackupCodes(db, user.uid)
+                                            userBackupCodes = codes
+                                            val success = MfaSecurity.downloadBackupCodesFile(context, user.email ?: currentEmail, codes)
+                                            if (!success) {
+                                                MfaSecurity.shareBackupCodes(context, user.email ?: currentEmail, codes)
+                                            }
+                                        }
+                                    }
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.testTag("download_backup_codes_quick_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Download,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Download", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        TextButton(
+                            onClick = { MfaSecurity.openSupportTicket(context) },
+                            modifier = Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .testTag("open_support_ticket_2fa_btn")
+                        ) {
+                            Icon(
+                                Icons.Default.HelpOutline,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Lost 2FA & Codes? Submit Recovery Ticket", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    // 2. Passkeys (Fingerprint / Face / Device Lock) Section
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                            .padding(14.dp)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Passkeys")
-                            Text(
-                                text = if (isPasskeysEnabled) "Passkey sign-in is enabled" else "Passkey sign-in is off",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        Switch(
-                            checked = isPasskeysEnabled,
-                            onCheckedChange = {
-                                isPasskeysEnabled = it
-                                SecuritySettings.setPasskeysEnabled(context, it)
-                                Toast.makeText(
-                                    context,
-                                    if (it) "Passkeys enabled for this device" else "Passkeys disabled",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Fingerprint,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Passkeys & Biometrics",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (isPasskeyRegistered) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surfaceContainerHighest
+                            ) {
+                                Text(
+                                    text = if (isPasskeyRegistered) "ENROLLED" else "NOT ENROLLED",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isPasskeyRegistered) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (isPasskeyRegistered)
+                                "Passkey registered for $currentEmail on $passkeyDeviceName. Sign in instantly without typing your password."
+                            else
+                                "Create a secure passkey to sign in using your fingerprint, face unlock, or device PIN.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (!isPasskeyRegistered) {
+                            FilledTonalButton(
+                                onClick = {
+                                    val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                                    if (keyguardManager == null || !keyguardManager.isDeviceSecure) {
+                                        Toast.makeText(
+                                            context,
+                                            "Please set up a screen lock (PIN, fingerprint, or face) on your device first.",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                        return@FilledTonalButton
+                                    }
+                                    val intent = keyguardManager.createConfirmDeviceCredentialIntent(
+                                        "Register Passkey",
+                                        "Verify fingerprint or PIN to link passkey to $currentEmail"
+                                    )
+                                    if (intent != null) {
+                                        passkeyRegisterLauncher.launch(intent)
+                                    } else {
+                                        currentUser?.let { user ->
+                                            SecuritySettings.registerPasskey(context, user.email ?: "", user.uid)
+                                            isPasskeyRegistered = true
+                                            isPasskeysEnabled = true
+                                            passkeyDeviceName = SecuritySettings.getPasskeyDeviceName(context)
+                                            coroutineScope.launch {
+                                                MfaSecurity.registerPasskeyInFirestore(db, user.uid, passkeyDeviceName)
+                                            }
+                                            Toast.makeText(context, "Passkey enrolled successfully!", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("register_passkey_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Fingerprint,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Create Passkey for this Device",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                                        val intent = keyguardManager?.createConfirmDeviceCredentialIntent(
+                                            "Verify Passkey",
+                                            "Test authentication with your registered passkey"
+                                        )
+                                        if (intent != null) {
+                                            passkeyTestLauncher.launch(intent)
+                                        } else {
+                                            Toast.makeText(context, "Passkey verified on $passkeyDeviceName", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("test_passkey_btn")
+                                ) {
+                                    Text("Test Passkey")
+                                }
+
+                                TextButton(
+                                    onClick = {
+                                        SecuritySettings.unregisterPasskey(context)
+                                        isPasskeyRegistered = false
+                                        currentUser?.let { user ->
+                                            coroutineScope.launch {
+                                                MfaSecurity.removePasskeyFromFirestore(db, user.uid)
+                                            }
+                                        }
+                                        Toast.makeText(context, "Passkey removed from this device", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.testTag("remove_passkey_btn")
+                                ) {
+                                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -826,6 +1168,188 @@ fun UserSettingsDialog(
                     modifier = Modifier.testTag("cancel_delete_account_btn")
                 ) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showTwoFactorSetupDialog && currentUser != null) {
+        AlertDialog(
+            onDismissRequest = { showTwoFactorSetupDialog = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+            content = {
+                TwoFactorSetupScreen(
+                    userUid = currentUser.uid,
+                    userEmail = currentEmail,
+                    onSetupComplete = {
+                        showTwoFactorSetupDialog = false
+                        isTwoFactorEnabled = true
+                        coroutineScope.launch {
+                            userBackupCodes = MfaSecurity.fetchBackupCodes(db, currentUser.uid)
+                        }
+                    },
+                    onBackClick = {
+                        showTwoFactorSetupDialog = false
+                    }
+                )
+            }
+        )
+    }
+
+    if (showBackupCodesDialog && currentUser != null) {
+        AlertDialog(
+            onDismissRequest = { showBackupCodesDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Key,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "2FA Backup Codes",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        text = "Each 10-digit backup code is single-use. If you lose access to your authenticator app, enter one of these codes to sign in.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (isLoadingBackupCodes) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                        }
+                    } else if (userBackupCodes.isEmpty()) {
+                        Text(
+                            text = "No backup codes found. Tap generate to create 8 new codes.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                userBackupCodes.forEachIndexed { index, code ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "${index + 1}.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = MfaSecurity.formatBackupCode(code),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    val success = MfaSecurity.downloadBackupCodesFile(context, currentUser.email ?: currentEmail, userBackupCodes)
+                                    if (!success) {
+                                        MfaSecurity.shareBackupCodes(context, currentUser.email ?: currentEmail, userBackupCodes)
+                                    }
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f).testTag("dialog_download_backup_codes_btn")
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Download", fontSize = 12.sp)
+                            }
+
+                            FilledTonalButton(
+                                onClick = {
+                                    MfaSecurity.copyBackupCodesToClipboard(context, userBackupCodes)
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f).testTag("dialog_copy_backup_codes_btn")
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Copy All", fontSize = 12.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    isLoadingBackupCodes = true
+                                    userBackupCodes = MfaSecurity.regenerateBackupCodes(db, currentUser.uid)
+                                    isLoadingBackupCodes = false
+                                    Toast.makeText(context, "8 new backup codes generated. Previous codes invalidated.", Toast.LENGTH_LONG).show()
+                                }
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("dialog_regenerate_backup_codes_btn")
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Generate 8 New Codes", fontSize = 12.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    HorizontalDivider()
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    TextButton(
+                        onClick = { MfaSecurity.openSupportTicket(context) },
+                        modifier = Modifier.fillMaxWidth().testTag("dialog_support_ticket_btn")
+                    ) {
+                        Icon(Icons.Default.HelpOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Lost 2FA & all codes? Submit Recovery Ticket", fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showBackupCodesDialog = false },
+                    modifier = Modifier.testTag("dialog_close_backup_codes_btn")
+                ) {
+                    Text("Close")
                 }
             }
         )

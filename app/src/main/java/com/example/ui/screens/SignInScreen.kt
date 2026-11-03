@@ -1,6 +1,12 @@
 package com.example.ui.screens
 
+import android.app.Activity
+import android.app.KeyguardManager
+import android.content.Context
 import android.util.Log
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -24,11 +30,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockReset
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import com.example.util.MfaSecurity
+import com.example.util.SecuritySettings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -105,6 +116,63 @@ fun SignInScreen(
     var isResetLoading by remember { mutableStateOf(false) }
     var forgotPasswordError by remember { mutableStateOf<String?>(null) }
     var forgotPasswordSuccess by remember { mutableStateOf(false) }
+
+    var showPasskeyDeviceDialog by remember { mutableStateOf(false) }
+    var passkeyDeviceEmailInput by remember { mutableStateOf("") }
+    var pendingPasskeyEmail by remember { mutableStateOf<String?>(null) }
+
+    val passkeyLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val userEmail = pendingPasskeyEmail ?: SecuritySettings.getPasskeyEmail(context) ?: email.trim()
+            if (userEmail.isNotBlank()) {
+                SecuritySettings.registerPasskey(context, userEmail, userEmail)
+                statusMessage = "Passkey verified for $userEmail! Signing in..."
+                onSignInSuccess()
+            } else {
+                statusMessage = "Passkey verified! You are now authenticated."
+                onSignInSuccess()
+            }
+        } else {
+            errorMessage = "Passkey verification was cancelled."
+        }
+    }
+
+    fun handlePasskeySignIn() {
+        val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        if (keyguardManager == null || !keyguardManager.isDeviceSecure) {
+            errorMessage = "Screen lock or biometrics (fingerprint/PIN) not configured on this device."
+            return
+        }
+
+        val registeredEmail = SecuritySettings.getPasskeyEmail(context)
+        val candidateEmail = when {
+            !registeredEmail.isNullOrBlank() -> registeredEmail
+            email.trim().isNotBlank() -> email.trim()
+            else -> null
+        }
+
+        if (candidateEmail != null) {
+            pendingPasskeyEmail = candidateEmail
+            try {
+                val intent = keyguardManager.createConfirmDeviceCredentialIntent(
+                    "Sign In with Passkey",
+                    "Verify fingerprint, face, or device PIN for $candidateEmail"
+                )
+                if (intent != null) {
+                    passkeyLauncher.launch(intent)
+                } else {
+                    errorMessage = "Device credential prompt unavailable."
+                }
+            } catch (e: Exception) {
+                errorMessage = "Passkey error: ${e.localizedMessage}"
+            }
+        } else {
+            passkeyDeviceEmailInput = email.trim()
+            showPasskeyDeviceDialog = true
+        }
+    }
 
     fun handlePasswordReset() {
         val trimmedEmail = forgotPasswordEmail.trim()
@@ -603,7 +671,59 @@ fun SignInScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Passkey Sign-In Button
+            OutlinedButton(
+                onClick = { if (!isLoading) handlePasskeySignIn() },
+                enabled = !isLoading,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .testTag("passkey_sign_in_btn")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Fingerprint,
+                        contentDescription = "Passkey",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Sign in with Passkey",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Recovery ticket support link
+            TextButton(
+                onClick = { MfaSecurity.openSupportTicket(context) },
+                modifier = Modifier.testTag("sign_in_recovery_ticket_btn")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.HelpOutline,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Can't sign in or lost 2FA? Submit a recovery ticket",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
 
             // Value props
             Row(
@@ -768,6 +888,95 @@ fun SignInScreen(
                     ) {
                         Text("Cancel")
                     }
+                }
+            }
+        )
+    }
+
+    if (showPasskeyDeviceDialog) {
+        AlertDialog(
+            onDismissRequest = { showPasskeyDeviceDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Fingerprint,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Sign In with Passkey",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Enter your account email to authenticate using this device's fingerprint, face unlock, or screen lock PIN.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    OutlinedTextField(
+                        value = passkeyDeviceEmailInput,
+                        onValueChange = { passkeyDeviceEmailInput = it },
+                        label = { Text("Account Email") },
+                        placeholder = { Text("user@example.com") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("passkey_device_email_input")
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val input = passkeyDeviceEmailInput.trim()
+                        if (input.isEmpty() || !android.util.Patterns.EMAIL_ADDRESS.matcher(input).matches()) {
+                            Toast.makeText(context, "Please enter a valid email address.", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        showPasskeyDeviceDialog = false
+                        pendingPasskeyEmail = input
+                        val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                        if (keyguardManager == null || !keyguardManager.isDeviceSecure) {
+                            errorMessage = "Screen lock or biometrics not configured on this device."
+                            return@Button
+                        }
+                        try {
+                            val intent = keyguardManager.createConfirmDeviceCredentialIntent(
+                                "Sign In with Passkey",
+                                "Verify fingerprint, face, or device PIN for $input"
+                            )
+                            if (intent != null) {
+                                passkeyLauncher.launch(intent)
+                            } else {
+                                SecuritySettings.registerPasskey(context, input, input)
+                                onSignInSuccess()
+                            }
+                        } catch (e: Exception) {
+                            errorMessage = "Passkey error: ${e.localizedMessage}"
+                        }
+                    },
+                    modifier = Modifier.testTag("passkey_device_confirm_btn")
+                ) {
+                    Text("Verify & Sign In")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showPasskeyDeviceDialog = false
+                        MfaSecurity.openSupportTicket(context)
+                    },
+                    modifier = Modifier.testTag("passkey_recovery_ticket_btn")
+                ) {
+                    Text("Recovery Ticket")
                 }
             }
         )

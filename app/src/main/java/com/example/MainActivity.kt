@@ -61,15 +61,15 @@ class MainActivity : ComponentActivity() {
                             return@LaunchedEffect
                         }
 
-                        if (!SecuritySettings.is2FAEnabled(context)) {
-                            mfaState = MfaScreenState.Verified
-                            return@LaunchedEffect
-                        }
-
                         val databaseId = context.getString(R.string.firestore_database_id)
                         val db = FirebaseFirestore.getInstance(databaseId)
-                        val hasSecret = MfaSecurity.fetchTotpSecret(db, user.uid) != null
-                        mfaState = if (hasSecret) MfaScreenState.Verify else MfaScreenState.Setup
+
+                        val local2FA = SecuritySettings.is2FAEnabled(context)
+                        val firestore2FA = MfaSecurity.is2FAEnabledInFirestore(db, user.uid)
+                        val secret = MfaSecurity.fetchTotpSecret(db, user.uid)
+
+                        val is2FAActive = (local2FA || firestore2FA) && !secret.isNullOrBlank()
+                        mfaState = if (is2FAActive) MfaScreenState.Verify else MfaScreenState.Verified
                     }
 
                     when {
